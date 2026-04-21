@@ -1,6 +1,6 @@
 # emdash-to-buffer
 
-EmDash plugin that queues first-time published `posts` entries to Buffer.
+[EmDash](https://github.com/emdash-cms/emdash) plugin that queues first-time published `posts` entries to [Buffer](https://buffer.com/).
 
 ## Features
 
