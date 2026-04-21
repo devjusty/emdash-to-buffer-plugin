@@ -1,0 +1,46 @@
+{
+	"name": "emdash-to-buffer-plugin",
+	"version": "0.1.0",
+	"description": "Queue first-time published EmDash posts to Buffer",
+	"type": "module",
+	"main": "dist/index.mjs",
+	"exports": {
+		".": {
+			"import": "./dist/index.mjs",
+			"types": "./dist/index.d.mts"
+		},
+		"./sandbox": "./dist/sandbox-entry.mjs"
+	},
+	"files": [
+		"dist"
+	],
+	"keywords": [
+		"emdash",
+		"cms",
+		"plugin",
+		"buffer",
+		"syndication"
+	],
+	"author": "Matt Kane",
+	"license": "MIT",
+	"peerDependencies": {
+		"emdash": ">=0.2.0"
+	},
+	"devDependencies": {
+		"@types/node": "^24.10.0",
+		"emdash": "^0.2.0",
+		"tsdown": "0.20.3",
+		"typescript": "^5.9.3",
+		"vitest": "^4.0.18"
+	},
+	"scripts": {
+		"build": "tsdown src/index.ts src/sandbox-entry.ts --format esm --dts --clean",
+		"dev": "tsdown src/index.ts src/sandbox-entry.ts --format esm --dts --watch",
+		"test": "vitest run",
+		"typecheck": "tsc --noEmit"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/devjusty/emdash-to-buffer-plugin.git"
+	}
+}
