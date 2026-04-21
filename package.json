@@ -1,6 +1,6 @@
 {
   "name": "emdash-to-buffer-plugin",
-  "version": "0.1.1",
+  "version": "0.1.2-beta.0",
   "description": "Queue first-time published EmDash posts to Buffer",
   "type": "module",
   "main": "dist/index.mjs",
@@ -26,14 +26,14 @@
   "peerDependencies": {
     "emdash": ">=0.2.0"
   },
-	"devDependencies": {
-		"@types/node": "^24.10.0",
-		"emdash": "^0.2.0",
-		"knip": "^6.6.0",
-		"tsdown": "0.20.3",
-		"typescript": "^5.9.3",
-		"vitest": "^4.0.18"
-	},
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "emdash": "^0.2.0",
+    "knip": "^6.6.0",
+    "tsdown": "0.20.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
   "scripts": {
     "build": "tsdown src/index.ts src/sandbox-entry.ts --format esm --dts --clean",
     "dev": "tsdown src/index.ts src/sandbox-entry.ts --format esm --dts --watch",

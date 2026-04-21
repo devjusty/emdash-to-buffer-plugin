@@ -15,7 +15,6 @@ concurrency:
 
 jobs:
   publish:
-    if: github.event.release.prerelease == false
     runs-on: ubuntu-latest
 
     steps:
@@ -76,4 +75,9 @@ jobs:
           fi
 
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        run: |
+          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
+            npm publish --provenance --access public --tag beta
+          else
+            npm publish --provenance --access public
+          fi
