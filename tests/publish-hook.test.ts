@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { handleAfterSave } from "../src/runtime.js";
 
-function createContext(overrides?: Record<string, unknown>) {
+function createContext(
+	overrides?: Record<string, unknown>,
+	fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>,
+) {
 	const kvData = new Map<string, unknown>([
 		["settings:enabled", true],
 		["settings:accessToken", "token-123"],
@@ -17,7 +20,9 @@ function createContext(overrides?: Record<string, unknown>) {
 		}
 	}
 
-	const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+	const fetchMock = vi.fn(
+		fetchImpl ?? (async () => new Response(JSON.stringify({ data: { createPost: { post: { id: "p" } } } }), { status: 200 })),
+	);
 
 	return {
 		ctx: {
@@ -103,5 +108,63 @@ describe("content:afterSave hook", () => {
 		);
 
 		expect(fetchMock).toHaveBeenCalledTimes(0);
+	});
+
+	it("auto-discovers channels when no channel IDs are configured", async () => {
+		const fetchImpl = async (_input: string, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body)) as {
+				query?: string;
+				variables?: Record<string, string>;
+			};
+
+			if (body.query?.includes("GetOrganizations")) {
+				return new Response(
+					JSON.stringify({
+						data: {
+							account: {
+								organizations: [{ id: "org-1" }],
+							},
+						},
+					}),
+					{ status: 200 },
+				);
+			}
+
+			if (body.query?.includes("GetChannels") && body.variables?.organizationId === "org-1") {
+				return new Response(
+					JSON.stringify({
+						data: {
+							channels: [{ id: "chan-1" }, { id: "chan-2" }],
+						},
+					}),
+					{ status: 200 },
+				);
+			}
+
+			return new Response(
+				JSON.stringify({ data: { createPost: { post: { id: "post-created" } } } }),
+				{ status: 200 },
+			);
+		};
+
+		const { ctx, fetchMock } = createContext({ "settings:profileIds": "" }, fetchImpl);
+
+		await handleAfterSave(
+			{
+				collection: "posts",
+				before: { status: "draft", published_at: null },
+				content: {
+					id: "post-1",
+					slug: "hello-world",
+					title: "Hello World",
+					excerpt: "Excerpt",
+					status: "published",
+					published_at: "2026-04-21T00:00:00.000Z",
+				},
+			},
+			ctx,
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(4);
 	});
 });

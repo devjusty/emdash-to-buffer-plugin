@@ -11,7 +11,7 @@ describe("emdashToBufferPlugin descriptor", () => {
 		expect(descriptor.format).toBe("standard");
 		expect(descriptor.entrypoint).toBe("emdash-to-buffer-plugin/sandbox");
 		expect(descriptor.capabilities).toContain("network:fetch");
-		expect(descriptor.allowedHosts).toEqual(["api.bufferapp.com"]);
+		expect(descriptor.allowedHosts).toEqual(["api.buffer.com", "api.bufferapp.com"]);
 	});
 
 	it("declares settings schema for token, profiles, template, and enabled", () => {

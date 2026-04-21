@@ -8,7 +8,7 @@ export function emdashToBufferPlugin(): PluginDescriptor {
 		entrypoint: "emdash-to-buffer-plugin/sandbox",
 		options: {},
 		capabilities: ["network:fetch"],
-		allowedHosts: ["api.bufferapp.com"],
+		allowedHosts: ["api.buffer.com", "api.bufferapp.com"],
 		adminPages: [],
 		adminWidgets: [],
 	};

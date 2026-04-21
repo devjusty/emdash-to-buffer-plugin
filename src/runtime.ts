@@ -1,10 +1,10 @@
 import type { PluginContext } from "emdash";
 
-import { sendBufferUpdate } from "./buffer.js";
+import { discoverChannelIds, sendBufferUpdate } from "./buffer.js";
 import { pickBufferImageUrl } from "./images.js";
 import { parseProfileIds, renderMessageTemplate } from "./render.js";
 
-export interface PublishEvent {
+interface PublishEvent {
 	collection: string;
 	before?: {
 		status?: string;
@@ -29,7 +29,7 @@ function buildPostUrl(siteUrl: string | null, slug: unknown): string {
 	}
 }
 
-export function isFirstPublish(event: PublishEvent): boolean {
+function isFirstPublish(event: PublishEvent): boolean {
 	if (event.content.status !== "published") return false;
 
 	if (event.before?.status && event.before.status !== "published") {
@@ -54,13 +54,25 @@ export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): 
 	const profileList = (await ctx.kv.get<string>("settings:profileIds")) ?? "";
 	const messageTemplate = (await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title} {url}";
 	const siteUrl = await ctx.kv.get<string>("settings:siteUrl");
-	const profileIds = parseProfileIds(profileList);
+	const configuredChannelIds = parseProfileIds(profileList);
 
-	if (!accessToken || profileIds.length === 0 || !ctx.http) {
+	if (!accessToken || !ctx.http) {
 		ctx.log.warn("emdash-to-buffer skipped send due to missing settings", {
 			hasAccessToken: !!accessToken,
-			profileCount: profileIds.length,
+			configuredChannelCount: configuredChannelIds.length,
 			hasHttp: !!ctx.http,
+		});
+		return;
+	}
+
+	const channelIds =
+		configuredChannelIds.length > 0
+			? configuredChannelIds
+			: await discoverChannelIds({ fetcher: ctx.http.fetch, accessToken });
+
+	if (channelIds.length === 0) {
+		ctx.log.warn("emdash-to-buffer skipped send because no Buffer channels were found", {
+			hadConfiguredChannels: configuredChannelIds.length > 0,
 		});
 		return;
 	}
@@ -73,11 +85,11 @@ export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): 
 	});
 	const imageUrl = pickBufferImageUrl(event.content) ?? undefined;
 
-	for (const profileId of profileIds) {
+	for (const channelId of channelIds) {
 		const result = await sendBufferUpdate({
 			fetcher: ctx.http.fetch,
 			accessToken,
-			profileId,
+			channelId,
 			text,
 			mediaUrl: imageUrl,
 			log: ctx.log,
@@ -86,19 +98,19 @@ export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): 
 		if (!result.ok) {
 			await ctx.kv.set("state:lastError", {
 				timestamp: new Date().toISOString(),
-				profileId,
+				channelId,
 				status: result.status ?? null,
 				error: result.error ?? "unknown",
 			});
 			ctx.log.error("emdash-to-buffer send failed", {
-				profileId,
+				channelId,
 				status: result.status,
 			});
 			continue;
 		}
 
 		ctx.log.info("emdash-to-buffer send succeeded", {
-			profileId,
+			channelId,
 			status: result.status,
 		});
 	}
@@ -120,9 +132,10 @@ export const pluginDefinition = {
 			},
 			profileIds: {
 				type: "string" as const,
-				label: "Buffer Profile IDs",
+				label: "Buffer Channel IDs",
 				multiline: true,
-				description: "One profile ID per line, or comma-separated values.",
+				description:
+					"Optional. One channel ID per line, or comma-separated values. Leave blank to auto-discover all channels.",
 				default: "",
 			},
 			messageTemplate: {

@@ -5,7 +5,8 @@
 ## Features
 
 - Publish-only trigger for `posts`
-- Multi-profile fan-out
+- Multi-channel fan-out
+- Automatic channel discovery when channel IDs are not set
 - Template tags: `{title}`, `{url}`, `{excerpt}`
 - Featured image fallback to Open Graph image
 - Retries on transient API failures
@@ -35,7 +36,7 @@ export default defineConfig({
 Configure plugin settings in EmDash admin:
 
 - Buffer access token
-- Profile IDs
+- Channel IDs (optional; blank means auto-discover)
 - Message template
 - Enable/disable switch
 
