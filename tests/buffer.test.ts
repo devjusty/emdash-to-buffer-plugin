@@ -95,4 +95,32 @@ describe("discoverChannels", () => {
 			{ id: "chan-1", name: "Main X", service: "twitter", username: "main" },
 		]);
 	});
+
+	it("throws a helpful error when channels query fails", async () => {
+		const fetchMock = async (_input: string, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body)) as { query?: string };
+
+			if (body.query?.includes("GetOrganizations")) {
+				return new Response(
+					JSON.stringify({
+						data: {
+							account: {
+								organizations: [{ id: "org-1" }],
+							},
+						},
+					}),
+					{ status: 200 },
+				);
+			}
+
+			return new Response(
+				JSON.stringify({ errors: [{ message: "Forbidden" }] }),
+				{ status: 200 },
+			);
+		};
+
+		await expect(discoverChannels({ fetcher: fetchMock, accessToken: "token" })).rejects.toThrow(
+			"Buffer channels query failed",
+		);
+	});
 });

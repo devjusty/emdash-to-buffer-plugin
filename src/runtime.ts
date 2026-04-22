@@ -20,6 +20,11 @@ interface AdminInteraction {
 	values?: Record<string, unknown>;
 }
 
+interface DiscoveryErrorState {
+	message: string;
+	timestamp: string;
+}
+
 function normalizePathSlug(rawSlug: unknown): string {
 	const slug = typeof rawSlug === "string" ? rawSlug.trim() : "";
 	if (!slug) return "/";
@@ -89,12 +94,31 @@ async function loadDiscoveredChannels(ctx: PluginContext): Promise<BufferChannel
 	return channels;
 }
 
+function parseDiscoveryError(value: unknown): DiscoveryErrorState | null {
+	if (!value || typeof value !== "object") return null;
+	const row = value as Record<string, unknown>;
+	if (typeof row.message !== "string") return null;
+	if (typeof row.timestamp !== "string") return null;
+	return { message: row.message, timestamp: row.timestamp };
+}
+
 async function discoverAndPersistChannels(ctx: PluginContext, accessToken: string): Promise<BufferChannel[]> {
 	if (!ctx.http) return [];
-	const channels = await discoverChannels({ fetcher: ctx.http.fetch, accessToken });
-	await ctx.kv.set("state:discoveredChannels", channels);
-	await ctx.kv.set("state:discoveredAt", new Date().toISOString());
-	return channels;
+	try {
+		const channels = await discoverChannels({ fetcher: ctx.http.fetch, accessToken });
+		await ctx.kv.set("state:discoveredChannels", channels);
+		await ctx.kv.set("state:discoveredAt", new Date().toISOString());
+		await ctx.kv.set("state:lastDiscoveryError", null);
+		return channels;
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		await ctx.kv.set("state:lastDiscoveryError", {
+			message,
+			timestamp: new Date().toISOString(),
+		});
+		ctx.log.error("emdash-to-buffer channel discovery failed", { message });
+		return [];
+	}
 }
 
 async function getChannelsForPublishing(ctx: PluginContext, accessToken: string): Promise<string[]> {
@@ -185,6 +209,7 @@ async function buildSettingsPage(ctx: PluginContext, options?: { refresh?: boole
 	const selectedSet = new Set<string>(selectedChannelIds);
 
 	const lastDiscoveredAt = await ctx.kv.get<string>("state:discoveredAt");
+	const discoveryError = parseDiscoveryError(await ctx.kv.get<unknown>("state:lastDiscoveryError"));
 
 	return {
 		blocks: [
@@ -213,6 +238,10 @@ async function buildSettingsPage(ctx: PluginContext, options?: { refresh?: boole
 					{
 						label: "Last discovery",
 						value: lastDiscoveredAt && lastDiscoveredAt.length > 0 ? lastDiscoveredAt : "Never",
+					},
+					{
+						label: "Last discovery error",
+						value: discoveryError?.message ?? "None",
 					},
 				],
 			},
@@ -337,12 +366,16 @@ export const pluginDefinition = {
 
 					const channels = await discoverAndPersistChannels(ctx, accessToken);
 					const isError = channels.length === 0;
+					const discoveryError = parseDiscoveryError(
+						await ctx.kv.get<unknown>("state:lastDiscoveryError"),
+					);
 					return {
 						...(await buildSettingsPage(ctx)),
 						toast: {
 							type: isError ? "error" : "success",
 							message: isError
-								? "No Buffer channels found. Verify token permissions and connected channels in Buffer."
+								? (discoveryError?.message ??
+										"No Buffer channels found. Verify token permissions and connected channels in Buffer.")
 								: `Discovered ${channels.length} Buffer channel${channels.length === 1 ? "" : "s"}.`,
 						},
 					};

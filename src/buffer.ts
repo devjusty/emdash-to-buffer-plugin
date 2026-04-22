@@ -131,13 +131,19 @@ export async function discoverChannels(args: {
 		query: orgQuery,
 	});
 
-	if (!organizationsResult.ok) return [];
+	if (!organizationsResult.ok) {
+		throw new Error(
+			`Buffer organizations query failed${
+				typeof organizationsResult.status === "number" ? ` (${organizationsResult.status})` : ""
+			}: ${organizationsResult.error}`,
+		);
+	}
 
 	const organizations = organizationsResult.data.account?.organizations ?? [];
 	if (organizations.length === 0) return [];
 
 	const channelQuery = `
-		query GetChannels($organizationId: String!) {
+		query GetChannels($organizationId: ID!) {
 			channels(input: { organizationId: $organizationId }) {
 				id
 				name
@@ -148,6 +154,7 @@ export async function discoverChannels(args: {
 	`;
 
 	const channels = new Map<string, BufferChannel>();
+	const channelErrors: string[] = [];
 	for (const organization of organizations) {
 		if (!organization.id) continue;
 
@@ -158,7 +165,14 @@ export async function discoverChannels(args: {
 			variables: { organizationId: organization.id },
 		});
 
-		if (!channelsResult.ok) continue;
+		if (!channelsResult.ok) {
+			channelErrors.push(
+				`org ${organization.id}${
+					typeof channelsResult.status === "number" ? ` (${channelsResult.status})` : ""
+				}: ${channelsResult.error}`,
+			);
+			continue;
+		}
 		for (const channel of channelsResult.data.channels ?? []) {
 			if (!channel.id) continue;
 			channels.set(channel.id, {
@@ -168,6 +182,10 @@ export async function discoverChannels(args: {
 				username: channel.displayName,
 			});
 		}
+	}
+
+	if (channels.size === 0 && channelErrors.length > 0) {
+		throw new Error(`Buffer channels query failed: ${channelErrors[0]}`);
 	}
 
 	return [...channels.values()];
