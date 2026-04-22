@@ -39,7 +39,7 @@ describe("discoverChannelIds", () => {
 					JSON.stringify({
 						data: {
 							channels: [
-								{ id: "chan-1", name: "Main X", service: "twitter", serviceUsername: "main" },
+								{ id: "chan-1", name: "Main X", service: "twitter", displayName: "main" },
 								{ id: "chan-2", name: "LinkedIn", service: "linkedin" },
 							],
 						},
@@ -82,7 +82,7 @@ describe("discoverChannels", () => {
 				JSON.stringify({
 					data: {
 						channels: [
-							{ id: "chan-1", name: "Main X", service: "twitter", serviceUsername: "main" },
+							{ id: "chan-1", name: "Main X", service: "twitter", displayName: "main" },
 						],
 					},
 				}),

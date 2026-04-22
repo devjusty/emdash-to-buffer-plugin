@@ -31,7 +31,7 @@ interface Channel {
 	id: string;
 	name?: string;
 	service?: string;
-	serviceUsername?: string;
+	displayName?: string;
 }
 
 export interface BufferChannel {
@@ -141,8 +141,8 @@ export async function discoverChannels(args: {
 			channels(input: { organizationId: $organizationId }) {
 				id
 				name
+				displayName
 				service
-				serviceUsername
 			}
 		}
 	`;
@@ -163,9 +163,9 @@ export async function discoverChannels(args: {
 			if (!channel.id) continue;
 			channels.set(channel.id, {
 				id: channel.id,
-				name: channel.name ?? channel.serviceUsername ?? channel.id,
+				name: channel.name ?? channel.displayName ?? channel.id,
 				service: channel.service ?? "unknown",
-				username: channel.serviceUsername,
+				username: channel.displayName,
 			});
 		}
 	}

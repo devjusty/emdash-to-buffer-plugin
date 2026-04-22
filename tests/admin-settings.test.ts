@@ -19,7 +19,7 @@ function createContext(initial: Array<[string, unknown]> = []) {
 				JSON.stringify({
 					data: {
 						channels: [
-							{ id: "chan-1", name: "Main X", service: "twitter", serviceUsername: "main" },
+							{ id: "chan-1", name: "Main X", service: "twitter", displayName: "main" },
 							{ id: "chan-2", name: "LinkedIn", service: "linkedin" },
 						],
 					},

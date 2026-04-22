@@ -208,6 +208,7 @@ async function buildSettingsPage(ctx: PluginContext, options?: { refresh?: boole
 			{
 				type: "fields",
 				fields: [
+					{ label: "Access token", value: accessToken ? "Configured" : "Not configured" },
 					{ label: "Discovered channels", value: String(channels.length) },
 					{
 						label: "Last discovery",
@@ -253,6 +254,7 @@ async function buildSettingsPage(ctx: PluginContext, options?: { refresh?: boole
 						type: "secret_input",
 						action_id: "accessToken",
 						label: "Buffer Access Token",
+						has_value: !!accessToken,
 					},
 					{
 						type: "checkbox",
@@ -334,11 +336,14 @@ export const pluginDefinition = {
 					}
 
 					const channels = await discoverAndPersistChannels(ctx, accessToken);
+					const isError = channels.length === 0;
 					return {
 						...(await buildSettingsPage(ctx)),
 						toast: {
-							type: "success",
-							message: `Discovered ${channels.length} Buffer channel${channels.length === 1 ? "" : "s"}.`,
+							type: isError ? "error" : "success",
+							message: isError
+								? "No Buffer channels found. Verify token permissions and connected channels in Buffer."
+								: `Discovered ${channels.length} Buffer channel${channels.length === 1 ? "" : "s"}.`,
 						},
 					};
 				}
