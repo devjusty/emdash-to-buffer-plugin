@@ -143,7 +143,7 @@ export async function discoverChannels(args: {
 	if (organizations.length === 0) return [];
 
 	const channelQuery = `
-		query GetChannels($organizationId: ID!) {
+		query GetChannels($organizationId: OrganizationId!) {
 			channels(input: { organizationId: $organizationId }) {
 				id
 				name
