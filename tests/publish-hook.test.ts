@@ -9,7 +9,7 @@ function createContext(
 	const kvData = new Map<string, unknown>([
 		["settings:enabled", true],
 		["settings:accessToken", "token-123"],
-		["settings:profileIds", "p1,p2"],
+		["settings:enabledChannelIds", ["p1", "p2"]],
 		["settings:messageTemplate", "{title} {url}"],
 		["settings:siteUrl", "https://example.com"],
 	]);
@@ -46,7 +46,7 @@ function createContext(
 }
 
 describe("content:afterSave hook", () => {
-	it("sends to all profiles for first publish in posts collection", async () => {
+	it("sends to all enabled channels for first publish in posts collection", async () => {
 		const { ctx, fetchMock } = createContext();
 
 		await handleAfterSave(
@@ -66,6 +66,28 @@ describe("content:afterSave hook", () => {
 		);
 
 		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("skips publishing when explicit enabled channels list is empty", async () => {
+		const { ctx, fetchMock } = createContext({ "settings:enabledChannelIds": [] });
+
+		await handleAfterSave(
+			{
+				collection: "posts",
+				before: { status: "draft", published_at: null },
+				content: {
+					id: "post-1",
+					slug: "hello-world",
+					title: "Hello World",
+					excerpt: "Excerpt",
+					status: "published",
+					published_at: "2026-04-21T00:00:00.000Z",
+				},
+			},
+			ctx,
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(0);
 	});
 
 	it("skips non-post collections", async () => {
@@ -147,7 +169,7 @@ describe("content:afterSave hook", () => {
 			);
 		};
 
-		const { ctx, fetchMock } = createContext({ "settings:profileIds": "" }, fetchImpl);
+		const { ctx, fetchMock } = createContext({ "settings:enabledChannelIds": null }, fetchImpl);
 
 		await handleAfterSave(
 			{

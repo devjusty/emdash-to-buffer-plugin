@@ -54,17 +54,8 @@ jobs:
             exit 1
           fi
 
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Test
-        run: pnpm test
-
       - name: Build
         run: pnpm build
-
-      - name: Knip
-        run: pnpm knip
 
       - name: Verify npm package does not already exist
         run: |

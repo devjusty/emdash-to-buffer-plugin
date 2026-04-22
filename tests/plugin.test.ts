@@ -21,9 +21,8 @@ describe("emdashToBufferPlugin descriptor", () => {
 		expect(descriptor.adminPages).toEqual([{ path: "/settings", label: "Settings", icon: "gear" }]);
 	});
 
-	it("declares settings schema for token, profiles, template, and enabled", () => {
+	it("declares settings schema for token, template, and enabled", () => {
 		expect(pluginDefinition.admin.settingsSchema.accessToken.type).toBe("secret");
-		expect(pluginDefinition.admin.settingsSchema.profileIds.type).toBe("string");
 		expect(pluginDefinition.admin.settingsSchema.messageTemplate.type).toBe("string");
 		expect(pluginDefinition.admin.settingsSchema.enabled.type).toBe("boolean");
 		expect(pluginDefinition.admin.pages).toEqual([{ path: "/settings", label: "Settings", icon: "gear" }]);

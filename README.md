@@ -6,7 +6,8 @@
 
 - Publish-only trigger for `posts`
 - Multi-channel fan-out
-- Automatic channel discovery when channel IDs are not set
+- Automatic channel discovery from your Buffer account
+- Settings UI with discoverable channel table and on/off channel toggles
 - Template tags: `{title}`, `{url}`, `{excerpt}`
 - Featured image fallback to Open Graph image
 - Retries on transient API failures
@@ -33,10 +34,10 @@ export default defineConfig({
 });
 ```
 
-Configure plugin settings in EmDash admin:
+Configure plugin settings in EmDash admin (`Plugins` -> `emdash-to-buffer` -> `Settings`):
 
 - Buffer access token
-- Channel IDs (optional; blank means auto-discover)
+- Discover channels and toggle enabled channels
 - Message template
 - Enable/disable switch
 

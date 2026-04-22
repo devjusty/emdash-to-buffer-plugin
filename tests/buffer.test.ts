@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { discoverChannelIds, isRetryableBufferStatus } from "../src/buffer.js";
+import { discoverChannelIds, discoverChannels, isRetryableBufferStatus } from "../src/buffer.js";
 
 describe("isRetryableBufferStatus", () => {
 	it("retries for 429 and 5xx", () => {
@@ -38,7 +38,10 @@ describe("discoverChannelIds", () => {
 				return new Response(
 					JSON.stringify({
 						data: {
-							channels: [{ id: "chan-1" }, { id: "chan-2" }],
+							channels: [
+								{ id: "chan-1", name: "Main X", service: "twitter", serviceUsername: "main" },
+								{ id: "chan-2", name: "LinkedIn", service: "linkedin" },
+							],
 						},
 					}),
 					{ status: 200 },
@@ -54,5 +57,42 @@ describe("discoverChannelIds", () => {
 		});
 
 		expect(channels).toEqual(["chan-1", "chan-2"]);
+	});
+});
+
+describe("discoverChannels", () => {
+	it("returns channel metadata for settings UI", async () => {
+		const fetchMock = async (_input: string, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body)) as { query?: string; variables?: Record<string, string> };
+
+			if (body.query?.includes("GetOrganizations")) {
+				return new Response(
+					JSON.stringify({
+						data: {
+							account: {
+								organizations: [{ id: "org-1" }],
+							},
+						},
+					}),
+					{ status: 200 },
+				);
+			}
+
+			return new Response(
+				JSON.stringify({
+					data: {
+						channels: [
+							{ id: "chan-1", name: "Main X", service: "twitter", serviceUsername: "main" },
+						],
+					},
+				}),
+				{ status: 200 },
+			);
+		};
+
+		const channels = await discoverChannels({ fetcher: fetchMock, accessToken: "token" });
+		expect(channels).toEqual([
+			{ id: "chan-1", name: "Main X", service: "twitter", username: "main" },
+		]);
 	});
 });

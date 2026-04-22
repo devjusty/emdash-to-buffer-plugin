@@ -1,10 +1,9 @@
 import type { PluginContext } from "emdash";
 
-import { discoverChannelIds, sendBufferUpdate } from "./buffer.js";
+import { discoverChannels, sendBufferUpdate, type BufferChannel } from "./buffer.js";
 import { pickBufferImageUrl } from "./images.js";
-import { parseProfileIds, renderMessageTemplate } from "./render.js";
+import { renderMessageTemplate } from "./render.js";
 
-// This module contains the main plugin logic for integrating EmDash with Buffer. It defines the event handler for content saves, which checks if a post is being published for the first time and, if so, gathers the necessary information and sends an update to Buffer to create a new post based on the content from EmDash.
 interface PublishEvent {
 	collection: string;
 	before?: {
@@ -21,14 +20,12 @@ interface AdminInteraction {
 	values?: Record<string, unknown>;
 }
 
-// This function normalizes a raw slug value by ensuring it is a string, trimming whitespace, and guaranteeing it starts with a slash. If the input is invalid or empty, it defaults to "/".
 function normalizePathSlug(rawSlug: unknown): string {
 	const slug = typeof rawSlug === "string" ? rawSlug.trim() : "";
 	if (!slug) return "/";
 	return slug.startsWith("/") ? slug : `/${slug}`;
 }
 
-// This function constructs a full URL for the post by combining the site URL and the normalized slug. If the site URL is not provided or if the combination results in an invalid URL, it falls back to returning just the path.
 function buildPostUrl(siteUrl: string | null, slug: unknown): string {
 	const path = normalizePathSlug(slug);
 	if (!siteUrl) return path;
@@ -39,7 +36,6 @@ function buildPostUrl(siteUrl: string | null, slug: unknown): string {
 	}
 }
 
-// This function determines whether the current save event represents the first time a post is being published. It checks the status of the content before and after the save, as well as the published_at timestamps, to make this determination.
 function isFirstPublish(event: PublishEvent): boolean {
 	if (event.content.status !== "published") return false;
 
@@ -54,7 +50,64 @@ function isFirstPublish(event: PublishEvent): boolean {
 	return previousPublishedAt !== currentPublishedAt;
 }
 
-// This function attempts to send a post to Buffer using the provided text, media URL, and channel ID. It implements retry logic with exponential backoff for handling transient errors such as rate limits or server issues, and returns a result indicating success or failure along with any relevant status or error information.
+function normalizeEnabledChannelIds(value: unknown): string[] | null {
+	if (!Array.isArray(value)) return null;
+	const ids = value
+		.map((item) => (typeof item === "string" ? item.trim() : ""))
+		.filter(Boolean);
+	return [...new Set(ids)];
+}
+
+function getChannelLabel(channel: BufferChannel): string {
+	if (channel.username) return `${channel.name} (${channel.service}: ${channel.username})`;
+	return `${channel.name} (${channel.service})`;
+}
+
+async function loadDiscoveredChannels(ctx: PluginContext): Promise<BufferChannel[]> {
+	const value = await ctx.kv.get<unknown>("state:discoveredChannels");
+	if (!Array.isArray(value)) return [];
+
+	const channels: BufferChannel[] = [];
+	for (const item of value) {
+		if (!item || typeof item !== "object") continue;
+		const row = item as Record<string, unknown>;
+		if (typeof row.id !== "string") continue;
+		if (typeof row.name !== "string") continue;
+		if (typeof row.service !== "string") continue;
+
+		const channel: BufferChannel = {
+			id: row.id,
+			name: row.name,
+			service: row.service,
+		};
+		if (typeof row.username === "string") {
+			channel.username = row.username;
+		}
+		channels.push(channel);
+	}
+
+	return channels;
+}
+
+async function discoverAndPersistChannels(ctx: PluginContext, accessToken: string): Promise<BufferChannel[]> {
+	if (!ctx.http) return [];
+	const channels = await discoverChannels({ fetcher: ctx.http.fetch, accessToken });
+	await ctx.kv.set("state:discoveredChannels", channels);
+	await ctx.kv.set("state:discoveredAt", new Date().toISOString());
+	return channels;
+}
+
+async function getChannelsForPublishing(ctx: PluginContext, accessToken: string): Promise<string[]> {
+	const explicit = normalizeEnabledChannelIds(await ctx.kv.get<unknown>("settings:enabledChannelIds"));
+	if (explicit) return explicit;
+
+	const cached = await loadDiscoveredChannels(ctx);
+	if (cached.length > 0) return cached.map((channel) => channel.id);
+
+	const discovered = await discoverAndPersistChannels(ctx, accessToken);
+	return discovered.map((channel) => channel.id);
+}
+
 export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): Promise<void> {
 	if (event.collection !== "posts") return;
 	if (!isFirstPublish(event)) return;
@@ -63,32 +116,22 @@ export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): 
 	if (!enabled) return;
 
 	const accessToken = await ctx.kv.get<string>("settings:accessToken");
-	const profileList = (await ctx.kv.get<string>("settings:profileIds")) ?? "";
-	const messageTemplate = (await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title} {url}";
-	const siteUrl = await ctx.kv.get<string>("settings:siteUrl");
-	const configuredChannelIds = parseProfileIds(profileList);
-
 	if (!accessToken || !ctx.http) {
 		ctx.log.warn("emdash-to-buffer skipped send due to missing settings", {
 			hasAccessToken: !!accessToken,
-			configuredChannelCount: configuredChannelIds.length,
 			hasHttp: !!ctx.http,
 		});
 		return;
 	}
 
-	const channelIds =
-		configuredChannelIds.length > 0
-			? configuredChannelIds
-			: await discoverChannelIds({ fetcher: ctx.http.fetch, accessToken });
-
+	const channelIds = await getChannelsForPublishing(ctx, accessToken);
 	if (channelIds.length === 0) {
-		ctx.log.warn("emdash-to-buffer skipped send because no Buffer channels were found", {
-			hadConfiguredChannels: configuredChannelIds.length > 0,
-		});
+		ctx.log.warn("emdash-to-buffer skipped send because no Buffer channels are enabled");
 		return;
 	}
 
+	const messageTemplate = (await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title} {url}";
+	const siteUrl = await ctx.kv.get<string>("settings:siteUrl");
 	const url = buildPostUrl(siteUrl ?? null, event.content.slug);
 	const text = renderMessageTemplate(messageTemplate, {
 		title: typeof event.content.title === "string" ? event.content.title : "",
@@ -114,31 +157,92 @@ export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): 
 				status: result.status ?? null,
 				error: result.error ?? "unknown",
 			});
-			ctx.log.error("emdash-to-buffer send failed", {
-				channelId,
-				status: result.status,
-			});
+			ctx.log.error("emdash-to-buffer send failed", { channelId, status: result.status });
 			continue;
 		}
 
-		ctx.log.info("emdash-to-buffer send succeeded", {
-			channelId,
-			status: result.status,
-		});
+		ctx.log.info("emdash-to-buffer send succeeded", { channelId, status: result.status });
 	}
 }
 
-async function buildSettingsPage(ctx: PluginContext) {
-	const profileIds = (await ctx.kv.get<string>("settings:profileIds")) ?? "";
+async function buildSettingsPage(ctx: PluginContext, options?: { refresh?: boolean }) {
+	const accessToken = await ctx.kv.get<string>("settings:accessToken");
 	const messageTemplate = (await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title} {url}";
 	const enabled = (await ctx.kv.get<boolean>("settings:enabled")) ?? true;
+	const savedEnabledChannelIds =
+		normalizeEnabledChannelIds(await ctx.kv.get<unknown>("settings:enabledChannelIds")) ?? [];
+
+	let channels = await loadDiscoveredChannels(ctx);
+	if (accessToken && ctx.http && (options?.refresh || channels.length === 0)) {
+		channels = await discoverAndPersistChannels(ctx, accessToken);
+	}
+
+	const channelIds = channels.map((channel) => channel.id);
+	const selectedChannelIds =
+		savedEnabledChannelIds.length > 0
+			? savedEnabledChannelIds.filter((id) => channelIds.includes(id))
+			: channelIds;
+	const selectedSet = new Set<string>(selectedChannelIds);
+
+	const lastDiscoveredAt = await ctx.kv.get<string>("state:discoveredAt");
 
 	return {
 		blocks: [
-			{ type: "header", text: "Buffer Settings" },
+			{ type: "header", text: "Emdash to Buffer Settings" },
 			{
 				type: "section",
 				text: "Configure access and posting behavior for Buffer publishing.",
+			},
+			{
+				type: "section",
+				text: accessToken
+					? "Discover channels from your Buffer account, then toggle which channels receive posts."
+					: "Save your Buffer access token first, then click Discover channels.",
+				accessory: {
+					type: "button",
+					action_id: "discover_channels",
+					label: "Discover channels",
+					style: "secondary",
+				},
+			},
+			{
+				type: "fields",
+				fields: [
+					{ label: "Discovered channels", value: String(channels.length) },
+					{
+						label: "Last discovery",
+						value: lastDiscoveredAt && lastDiscoveredAt.length > 0 ? lastDiscoveredAt : "Never",
+					},
+				],
+			},
+			{
+				type: "table",
+				block_id: "channels-table",
+				page_action_id: "channels_table_page",
+				columns: [
+					{ key: "name", label: "Channel", format: "text" },
+					{ key: "service", label: "Network", format: "badge" },
+					{ key: "id", label: "Channel ID", format: "code" },
+					{ key: "enabled", label: "Enabled", format: "badge" },
+				],
+				rows:
+					channels.length > 0
+						? channels.map((channel) => ({
+								name: channel.username
+									? `${channel.name} (@${channel.username})`
+									: channel.name,
+								service: channel.service,
+								id: channel.id,
+								enabled: selectedSet.has(channel.id) ? "on" : "off",
+							}))
+						: [
+								{
+									name: "No channels discovered yet",
+									service: "-",
+									id: "-",
+									enabled: "off",
+								},
+							],
 			},
 			{ type: "divider" },
 			{
@@ -151,11 +255,14 @@ async function buildSettingsPage(ctx: PluginContext) {
 						label: "Buffer Access Token",
 					},
 					{
-						type: "text_input",
-						action_id: "profileIds",
-						label: "Buffer Channel IDs",
-						multiline: true,
-						initial_value: profileIds,
+						type: "checkbox",
+						action_id: "enabledChannelIds",
+						label: "Enabled channels",
+						options: channels.map((channel) => ({
+							label: getChannelLabel(channel),
+							value: channel.id,
+						})),
+						initial_value: selectedChannelIds,
 					},
 					{
 						type: "text_input",
@@ -179,15 +286,16 @@ async function buildSettingsPage(ctx: PluginContext) {
 
 async function saveSettings(ctx: PluginContext, values: Record<string, unknown>) {
 	const accessToken = typeof values.accessToken === "string" ? values.accessToken.trim() : "";
-	const profileIds = typeof values.profileIds === "string" ? values.profileIds : "";
-	const messageTemplate = typeof values.messageTemplate === "string" ? values.messageTemplate : "{title} {url}";
+	const enabledChannelIds = normalizeEnabledChannelIds(values.enabledChannelIds) ?? [];
+	const messageTemplate =
+		typeof values.messageTemplate === "string" ? values.messageTemplate : "{title} {url}";
 	const enabled = typeof values.enabled === "boolean" ? values.enabled : true;
 
 	if (accessToken.length > 0) {
 		await ctx.kv.set("settings:accessToken", accessToken);
 	}
 
-	await ctx.kv.set("settings:profileIds", profileIds);
+	await ctx.kv.set("settings:enabledChannelIds", enabledChannelIds);
 	await ctx.kv.set("settings:messageTemplate", messageTemplate);
 	await ctx.kv.set("settings:enabled", enabled);
 
@@ -213,6 +321,28 @@ export const pluginDefinition = {
 					return buildSettingsPage(ctx);
 				}
 
+				if (interaction?.type === "block_action" && interaction.action_id === "discover_channels") {
+					const accessToken = await ctx.kv.get<string>("settings:accessToken");
+					if (!accessToken || !ctx.http) {
+						return {
+							...(await buildSettingsPage(ctx)),
+							toast: {
+								type: "error",
+								message: "Add and save your Buffer access token first.",
+							},
+						};
+					}
+
+					const channels = await discoverAndPersistChannels(ctx, accessToken);
+					return {
+						...(await buildSettingsPage(ctx)),
+						toast: {
+							type: "success",
+							message: `Discovered ${channels.length} Buffer channel${channels.length === 1 ? "" : "s"}.`,
+						},
+					};
+				}
+
 				if (interaction?.type === "form_submit" && interaction.action_id === "save_settings") {
 					return saveSettings(ctx, interaction.values ?? {});
 				}
@@ -228,14 +358,6 @@ export const pluginDefinition = {
 				type: "secret" as const,
 				label: "Buffer Access Token",
 				description: "Personal access token used for Buffer API requests.",
-			},
-			profileIds: {
-				type: "string" as const,
-				label: "Buffer Channel IDs",
-				multiline: true,
-				description:
-					"Optional. One channel ID per line, or comma-separated values. Leave blank to auto-discover all channels.",
-				default: "",
 			},
 			messageTemplate: {
 				type: "string" as const,
