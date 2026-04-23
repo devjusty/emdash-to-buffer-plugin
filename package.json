@@ -1,6 +1,6 @@
 {
   "name": "emdash-to-buffer-plugin",
-  "version": "0.1.5-beta.2",
+  "version": "0.1.5-beta.3",
   "description": "Send newly published EmDash posts to Buffer queue",
   "type": "module",
   "main": "dist/index.mjs",

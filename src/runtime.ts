@@ -14,6 +14,11 @@ interface PublishEvent {
 	content: Record<string, unknown>;
 }
 
+interface PublishHookEvent {
+	collection: string;
+	content: Record<string, unknown>;
+}
+
 interface AdminInteraction {
 	type?: string;
 	page?: string;
@@ -288,9 +293,19 @@ async function getChannelsForPublishing(ctx: PluginContext, accessToken: string)
 export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): Promise<void> {
 	if (event.collection !== "posts") return;
 	if (!isFirstPublish(event)) return;
+	await handlePublishedContent(event.content, ctx);
+}
 
-	const postId = typeof event.content.id === "string" ? event.content.id : "";
-	const postSlug = typeof event.content.slug === "string" ? event.content.slug : "";
+export async function handleAfterPublish(event: PublishHookEvent, ctx: PluginContext): Promise<void> {
+	if (event.collection !== "posts") return;
+	await handlePublishedContent(event.content, ctx);
+}
+
+async function handlePublishedContent(content: Record<string, unknown>, ctx: PluginContext): Promise<void> {
+	if (content.status !== "published") return;
+
+	const postId = typeof content.id === "string" ? content.id : "";
+	const postSlug = typeof content.slug === "string" ? content.slug : "";
 
 	const enabled = (await ctx.kv.get<boolean>("settings:enabled")) ?? true;
 	if (!enabled) {
@@ -341,13 +356,13 @@ export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): 
 	const messageTemplate =
 		(await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title}{excerpt}{url}";
 	const siteUrl = await ctx.kv.get<string>("settings:siteUrl");
-	const url = buildPostUrl(siteUrl ?? null, event.content.slug);
+	const url = buildPostUrl(siteUrl ?? null, content.slug);
 	const text = renderMessageTemplate(messageTemplate, {
-		title: typeof event.content.title === "string" ? event.content.title : "",
+		title: typeof content.title === "string" ? content.title : "",
 		url,
-		excerpt: typeof event.content.excerpt === "string" ? event.content.excerpt : "",
+		excerpt: typeof content.excerpt === "string" ? content.excerpt : "",
 	});
-	const imageUrl = pickBufferImageUrl(event.content) ?? undefined;
+	const imageUrl = pickBufferImageUrl(content) ?? undefined;
 	for (const channelId of channelIds) {
 		const result = await sendBufferUpdate({
 			fetcher: ctx.http.fetch,
@@ -588,6 +603,10 @@ export const pluginDefinition = {
 		"content:afterSave": {
 			errorPolicy: "continue" as const,
 			handler: handleAfterSave,
+		},
+		"content:afterPublish": {
+			errorPolicy: "continue" as const,
+			handler: handleAfterPublish,
 		},
 	},
 	routes: {

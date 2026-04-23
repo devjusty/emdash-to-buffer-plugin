@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { handleAfterSave, pluginDefinition } from "../src/runtime.js";
+import { handleAfterPublish, handleAfterSave, pluginDefinition } from "../src/runtime.js";
 
 function createContext(
 	overrides?: Record<string, unknown>,
@@ -132,6 +132,26 @@ describe("content:afterSave hook", () => {
 					id: "post-1",
 					slug: "hello-world",
 					title: "Hello World",
+					excerpt: "Excerpt",
+					status: "published",
+				},
+			},
+			ctx,
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("sends on content:afterPublish even without isNew/before fields", async () => {
+		const { ctx, fetchMock } = createContext();
+
+		await handleAfterPublish(
+			{
+				collection: "posts",
+				content: {
+					id: "post-2",
+					slug: "published-from-workflow",
+					title: "Published from workflow",
 					excerpt: "Excerpt",
 					status: "published",
 				},

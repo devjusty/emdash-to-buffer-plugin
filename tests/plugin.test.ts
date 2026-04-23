@@ -34,6 +34,7 @@ describe("emdashToBufferPlugin descriptor", () => {
 		expect(pluginDefinition.admin.settingsSchema.accessToken.type).toBe("secret");
 		expect(pluginDefinition.admin.settingsSchema.messageTemplate.type).toBe("string");
 		expect(pluginDefinition.admin.settingsSchema.enabled.type).toBe("boolean");
+		expect(pluginDefinition.hooks["content:afterPublish"]).toBeDefined();
 		expect(pluginDefinition.admin.pages).toEqual([
 			{ path: "/settings", label: "Buffer Settings", icon: "gear" },
 		]);
