@@ -6,6 +6,7 @@ import { renderMessageTemplate } from "./render.js";
 
 interface PublishEvent {
 	collection: string;
+	isNew?: boolean;
 	before?: {
 		status?: string;
 		published_at?: string | null;
@@ -109,9 +110,14 @@ function buildPostUrl(siteUrl: string | null, slug: unknown): string {
 
 function isFirstPublish(event: PublishEvent): boolean {
 	if (event.content.status !== "published") return false;
+	if (event.isNew === true) return true;
 
 	if (event.before?.status && event.before.status !== "published") {
 		return true;
+	}
+
+	if (!event.before) {
+		return typeof event.content.published_at === "string";
 	}
 
 	const previousPublishedAt = event.before?.published_at ?? null;
@@ -283,8 +289,21 @@ export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): 
 	if (event.collection !== "posts") return;
 	if (!isFirstPublish(event)) return;
 
+	const postId = typeof event.content.id === "string" ? event.content.id : "";
+	const postSlug = typeof event.content.slug === "string" ? event.content.slug : "";
+
 	const enabled = (await ctx.kv.get<boolean>("settings:enabled")) ?? true;
-	if (!enabled) return;
+	if (!enabled) {
+		await appendDeliveryLog(ctx, {
+			createdAt: new Date().toISOString(),
+			status: "failed",
+			postId,
+			postSlug,
+			channelId: "-",
+			message: "Buffer posting is disabled in plugin settings",
+		});
+		return;
+	}
 
 	const accessToken = await ctx.kv.get<string>("settings:accessToken");
 	if (!accessToken || !ctx.http) {
@@ -292,16 +311,35 @@ export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): 
 			hasAccessToken: !!accessToken,
 			hasHttp: !!ctx.http,
 		});
+		await appendDeliveryLog(ctx, {
+			createdAt: new Date().toISOString(),
+			status: "failed",
+			postId,
+			postSlug,
+			channelId: "-",
+			message: !accessToken
+				? "Missing Buffer access token in plugin settings"
+				: "Plugin HTTP access is unavailable",
+		});
 		return;
 	}
 
 	const channelIds = await getChannelsForPublishing(ctx, accessToken);
 	if (channelIds.length === 0) {
 		ctx.log.warn("emdash-to-buffer skipped send because no Buffer channels are enabled");
+		await appendDeliveryLog(ctx, {
+			createdAt: new Date().toISOString(),
+			status: "failed",
+			postId,
+			postSlug,
+			channelId: "-",
+			message: "No enabled Buffer channels found",
+		});
 		return;
 	}
 
-	const messageTemplate = (await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title} {url}";
+	const messageTemplate =
+		(await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title}{excerpt}{url}";
 	const siteUrl = await ctx.kv.get<string>("settings:siteUrl");
 	const url = buildPostUrl(siteUrl ?? null, event.content.slug);
 	const text = renderMessageTemplate(messageTemplate, {
@@ -310,9 +348,6 @@ export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): 
 		excerpt: typeof event.content.excerpt === "string" ? event.content.excerpt : "",
 	});
 	const imageUrl = pickBufferImageUrl(event.content) ?? undefined;
-	const postId = typeof event.content.id === "string" ? event.content.id : "";
-	const postSlug = typeof event.content.slug === "string" ? event.content.slug : "";
-
 	for (const channelId of channelIds) {
 		const result = await sendBufferUpdate({
 			fetcher: ctx.http.fetch,
@@ -358,7 +393,8 @@ export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): 
 
 async function buildSettingsPage(ctx: PluginContext, options?: { refresh?: boolean }) {
 	const accessToken = await ctx.kv.get<string>("settings:accessToken");
-	const messageTemplate = (await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title} {url}";
+	const messageTemplate =
+		(await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title}{excerpt}{url}";
 	const enabled = (await ctx.kv.get<boolean>("settings:enabled")) ?? true;
 	const savedEnabledChannelIds = normalizeEnabledChannelIds(
 		await ctx.kv.get<unknown>("settings:enabledChannelIds"),
@@ -530,7 +566,7 @@ async function saveSettings(ctx: PluginContext, values: Record<string, unknown>)
 	const accessToken = typeof values.accessToken === "string" ? values.accessToken.trim() : "";
 	const enabledChannelIds = normalizeEnabledChannelIds(values.enabledChannelIds) ?? [];
 	const messageTemplate =
-		typeof values.messageTemplate === "string" ? values.messageTemplate : "{title} {url}";
+		typeof values.messageTemplate === "string" ? values.messageTemplate : "{title}{excerpt}{url}";
 	const enabled = typeof values.enabled === "boolean" ? values.enabled : true;
 
 	if (accessToken.length > 0) {
@@ -612,7 +648,7 @@ export const pluginDefinition = {
 		},
 	},
 	admin: {
-		pages: [{ path: "/settings", label: "Settings", icon: "gear" }],
+		pages: [{ path: "/settings", label: "Buffer Settings", icon: "gear" }],
 		settingsSchema: {
 			accessToken: {
 				type: "secret" as const,
@@ -623,7 +659,7 @@ export const pluginDefinition = {
 				type: "string" as const,
 				label: "Message Template",
 				multiline: true,
-				default: "{title} {url}",
+				default: "{title}{excerpt}{url}",
 			},
 			enabled: {
 				type: "boolean" as const,

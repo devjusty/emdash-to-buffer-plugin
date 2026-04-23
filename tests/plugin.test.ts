@@ -18,7 +18,9 @@ describe("emdashToBufferPlugin descriptor", () => {
 		expect(descriptor.capabilities).toContain("read:content");
 		expect(descriptor.capabilities).toContain("network:fetch");
 		expect(descriptor.allowedHosts).toEqual(["api.buffer.com", "api.bufferapp.com"]);
-		expect(descriptor.adminPages).toEqual([{ path: "/settings", label: "Settings", icon: "gear" }]);
+		expect(descriptor.adminPages).toEqual([
+			{ path: "/settings", label: "Buffer Settings", icon: "gear" },
+		]);
 		expect(descriptor.storage?.delivery_logs?.indexes).toEqual([
 			"createdAt",
 			"status",
@@ -32,7 +34,9 @@ describe("emdashToBufferPlugin descriptor", () => {
 		expect(pluginDefinition.admin.settingsSchema.accessToken.type).toBe("secret");
 		expect(pluginDefinition.admin.settingsSchema.messageTemplate.type).toBe("string");
 		expect(pluginDefinition.admin.settingsSchema.enabled.type).toBe("boolean");
-		expect(pluginDefinition.admin.pages).toEqual([{ path: "/settings", label: "Settings", icon: "gear" }]);
+		expect(pluginDefinition.admin.pages).toEqual([
+			{ path: "/settings", label: "Buffer Settings", icon: "gear" },
+		]);
 		expect(pluginDefinition.routes.admin).toBeDefined();
 	});
 });

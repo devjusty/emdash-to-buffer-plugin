@@ -91,7 +91,7 @@ describe("content:afterSave hook", () => {
 	});
 
 	it("skips publishing when explicit enabled channels list is empty", async () => {
-		const { ctx, fetchMock } = createContext({ "settings:enabledChannelIds": [] });
+		const { ctx, fetchMock, putMock } = createContext({ "settings:enabledChannelIds": [] });
 
 		await handleAfterSave(
 			{
@@ -110,6 +110,36 @@ describe("content:afterSave hook", () => {
 		);
 
 		expect(fetchMock).toHaveBeenCalledTimes(0);
+		expect(putMock).toHaveBeenCalledTimes(1);
+		expect(putMock).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({
+				status: "failed",
+				channelId: "-",
+				message: "No enabled Buffer channels found",
+			}),
+		);
+	});
+
+	it("treats isNew published events as first publish even without before payload", async () => {
+		const { ctx, fetchMock } = createContext();
+
+		await handleAfterSave(
+			{
+				collection: "posts",
+				isNew: true,
+				content: {
+					id: "post-1",
+					slug: "hello-world",
+					title: "Hello World",
+					excerpt: "Excerpt",
+					status: "published",
+				},
+			},
+			ctx,
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});
 
 	it("skips non-post collections", async () => {
