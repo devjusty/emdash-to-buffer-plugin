@@ -19,6 +19,13 @@ describe("emdashToBufferPlugin descriptor", () => {
 		expect(descriptor.capabilities).toContain("network:fetch");
 		expect(descriptor.allowedHosts).toEqual(["api.buffer.com", "api.bufferapp.com"]);
 		expect(descriptor.adminPages).toEqual([{ path: "/settings", label: "Settings", icon: "gear" }]);
+		expect(descriptor.storage?.delivery_logs?.indexes).toEqual([
+			"createdAt",
+			"status",
+			"channelId",
+			"postId",
+			"postSlug",
+		]);
 	});
 
 	it("declares settings schema for token, template, and enabled", () => {

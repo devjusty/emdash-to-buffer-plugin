@@ -25,6 +25,72 @@ interface DiscoveryErrorState {
 	timestamp: string;
 }
 
+type DeliveryLogStatus = "success" | "failed";
+
+interface DeliveryLogRecord {
+	createdAt: string;
+	status: DeliveryLogStatus;
+	postId: string;
+	postSlug: string;
+	channelId: string;
+	code?: string;
+	message: string;
+}
+
+async function pruneDeliveryLogs(ctx: PluginContext, maxItems: number): Promise<void> {
+	const deliveryLogs = ctx.storage?.delivery_logs;
+	if (!deliveryLogs) return;
+
+	const pageSize = 500;
+	let totalCount = 0;
+	let cursor: string | undefined;
+	const pageIds: string[][] = [];
+
+	while (true) {
+		const result = await deliveryLogs.query({
+			orderBy: { createdAt: "asc" },
+			limit: pageSize,
+			...(cursor ? { cursor } : {}),
+		});
+
+		const ids = (Array.isArray(result?.items) ? result.items : [])
+			.map((item) => (item && typeof item.id === "string" ? item.id : ""))
+			.filter(Boolean);
+		pageIds.push(ids);
+		totalCount += ids.length;
+
+		const nextCursor = typeof result?.cursor === "string" && result.cursor.length > 0 ? result.cursor : undefined;
+		const hasMore = result?.hasMore === true || !!nextCursor;
+		if (!hasMore) break;
+		if (!nextCursor) break;
+		cursor = nextCursor;
+	}
+
+	let remainingToDelete = totalCount - maxItems;
+	if (remainingToDelete <= 0) return;
+
+	for (const ids of pageIds) {
+		if (remainingToDelete <= 0) break;
+		const batch = ids.slice(0, remainingToDelete);
+		if (batch.length > 0) {
+			await deliveryLogs.deleteMany(batch);
+			remainingToDelete -= batch.length;
+		}
+	}
+}
+
+async function appendDeliveryLog(ctx: PluginContext, record: DeliveryLogRecord): Promise<void> {
+	try {
+		const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+		await ctx.storage?.delivery_logs?.put(id, record);
+		await pruneDeliveryLogs(ctx, 200);
+	} catch (error) {
+		ctx.log.warn("emdash-to-buffer could not persist delivery log", {
+			message: error instanceof Error ? error.message : String(error),
+		});
+	}
+}
+
 function normalizePathSlug(rawSlug: unknown): string {
 	const slug = typeof rawSlug === "string" ? rawSlug.trim() : "";
 	if (!slug) return "/";
@@ -92,6 +158,87 @@ async function loadDiscoveredChannels(ctx: PluginContext): Promise<BufferChannel
 	}
 
 	return channels;
+}
+
+async function loadRecentDeliveryLogs(ctx: PluginContext): Promise<DeliveryLogRecord[]> {
+	try {
+		const deliveryLogs = ctx.storage?.delivery_logs;
+		if (!deliveryLogs) return [];
+
+		const result = await deliveryLogs.query({
+			orderBy: { createdAt: "desc" },
+			limit: 50,
+		});
+
+		const items = Array.isArray(result?.items) ? result.items : [];
+		const records: DeliveryLogRecord[] = [];
+		for (const item of items) {
+			if (!item || typeof item !== "object") continue;
+			const wrapped = item as Record<string, unknown>;
+			if (!wrapped.data || typeof wrapped.data !== "object") continue;
+			const row = wrapped.data as Record<string, unknown>;
+			if (typeof row.createdAt !== "string") continue;
+			if (row.status !== "success" && row.status !== "failed") continue;
+			if (typeof row.postId !== "string") continue;
+			if (typeof row.postSlug !== "string") continue;
+			if (typeof row.channelId !== "string") continue;
+			if (typeof row.message !== "string") continue;
+
+			records.push({
+				createdAt: row.createdAt,
+				status: row.status,
+				postId: row.postId,
+				postSlug: row.postSlug,
+				channelId: row.channelId,
+				code: typeof row.code === "string" ? row.code : undefined,
+				message: row.message,
+			});
+		}
+
+		return records.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+	} catch (error) {
+		ctx.log.warn("emdash-to-buffer could not load delivery logs", {
+			message: error instanceof Error ? error.message : String(error),
+		});
+		return [];
+	}
+}
+
+async function clearAllDeliveryLogs(ctx: PluginContext): Promise<number> {
+	const deliveryLogs = ctx.storage?.delivery_logs;
+	if (!deliveryLogs) return 0;
+
+	const pageSize = 500;
+	let cursor: string | undefined;
+	const allIds: string[] = [];
+
+	while (true) {
+		const result = await deliveryLogs.query({
+			orderBy: { createdAt: "asc" },
+			limit: pageSize,
+			...(cursor ? { cursor } : {}),
+		});
+
+		const ids = (Array.isArray(result?.items) ? result.items : [])
+			.map((item) => (item && typeof item.id === "string" ? item.id : ""))
+			.filter(Boolean);
+
+		if (ids.length > 0) {
+			allIds.push(...ids);
+		}
+
+		const nextCursor = typeof result?.cursor === "string" && result.cursor.length > 0 ? result.cursor : undefined;
+		const hasMore = result?.hasMore === true || !!nextCursor;
+		if (!hasMore) break;
+		if (!nextCursor) break;
+		cursor = nextCursor;
+	}
+
+	if (allIds.length === 0) return 0;
+
+	const uniqueIds = [...new Set(allIds)];
+	await deliveryLogs.deleteMany(uniqueIds);
+	return uniqueIds.length;
 }
 
 function parseDiscoveryError(value: unknown): DiscoveryErrorState | null {
@@ -163,6 +310,8 @@ export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): 
 		excerpt: typeof event.content.excerpt === "string" ? event.content.excerpt : "",
 	});
 	const imageUrl = pickBufferImageUrl(event.content) ?? undefined;
+	const postId = typeof event.content.id === "string" ? event.content.id : "";
+	const postSlug = typeof event.content.slug === "string" ? event.content.slug : "";
 
 	for (const channelId of channelIds) {
 		const result = await sendBufferUpdate({
@@ -182,10 +331,28 @@ export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): 
 				error: result.error ?? "unknown",
 			});
 			ctx.log.error("emdash-to-buffer send failed", { channelId, status: result.status });
+			await appendDeliveryLog(ctx, {
+				createdAt: new Date().toISOString(),
+				status: "failed",
+				postId,
+				postSlug,
+				channelId,
+				code: typeof result.status === "number" ? String(result.status) : undefined,
+				message: result.error ?? "Unknown error",
+			});
 			continue;
 		}
 
 		ctx.log.info("emdash-to-buffer send succeeded", { channelId, status: result.status });
+		await appendDeliveryLog(ctx, {
+			createdAt: new Date().toISOString(),
+			status: "success",
+			postId,
+			postSlug,
+			channelId,
+			code: typeof result.status === "number" ? String(result.status) : undefined,
+			message: "Queued in Buffer",
+		});
 	}
 }
 
@@ -193,8 +360,9 @@ async function buildSettingsPage(ctx: PluginContext, options?: { refresh?: boole
 	const accessToken = await ctx.kv.get<string>("settings:accessToken");
 	const messageTemplate = (await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title} {url}";
 	const enabled = (await ctx.kv.get<boolean>("settings:enabled")) ?? true;
-	const savedEnabledChannelIds =
-		normalizeEnabledChannelIds(await ctx.kv.get<unknown>("settings:enabledChannelIds")) ?? [];
+	const savedEnabledChannelIds = normalizeEnabledChannelIds(
+		await ctx.kv.get<unknown>("settings:enabledChannelIds"),
+	);
 
 	let channels = await loadDiscoveredChannels(ctx);
 	if (accessToken && ctx.http && (options?.refresh || channels.length === 0)) {
@@ -203,13 +371,14 @@ async function buildSettingsPage(ctx: PluginContext, options?: { refresh?: boole
 
 	const channelIds = channels.map((channel) => channel.id);
 	const selectedChannelIds =
-		savedEnabledChannelIds.length > 0
-			? savedEnabledChannelIds.filter((id) => channelIds.includes(id))
-			: channelIds;
+		savedEnabledChannelIds === null
+			? channelIds
+			: savedEnabledChannelIds.filter((id) => channelIds.includes(id));
 	const selectedSet = new Set<string>(selectedChannelIds);
 
 	const lastDiscoveredAt = await ctx.kv.get<string>("state:discoveredAt");
 	const discoveryError = parseDiscoveryError(await ctx.kv.get<unknown>("state:lastDiscoveryError"));
+	const deliveryLogs = await loadRecentDeliveryLogs(ctx);
 
 	return {
 		blocks: [
@@ -271,6 +440,48 @@ async function buildSettingsPage(ctx: PluginContext, options?: { refresh?: boole
 									service: "-",
 									id: "-",
 									enabled: "off",
+								},
+							],
+			},
+			{
+				type: "section",
+				text: "Review recent publish attempts and clear logs when you want a fresh history.",
+				accessory: {
+					type: "button",
+					action_id: "clear_delivery_logs",
+					label: "Clear logs",
+					style: "secondary",
+				},
+			},
+			{
+				type: "table",
+				block_id: "delivery-log-table",
+				columns: [
+					{ key: "when", label: "When", format: "text" },
+					{ key: "post", label: "Post", format: "text" },
+					{ key: "channel", label: "Channel", format: "code" },
+					{ key: "status", label: "Status", format: "badge" },
+					{ key: "code", label: "Code", format: "code" },
+					{ key: "message", label: "Message", format: "text" },
+				],
+				rows:
+					deliveryLogs.length > 0
+						? deliveryLogs.map((row) => ({
+								when: row.createdAt,
+								post: row.postSlug || row.postId || "-",
+								channel: row.channelId,
+								status: row.status,
+								code: row.code ?? "-",
+								message: row.message,
+							}))
+						: [
+								{
+									when: "-",
+									post: "-",
+									channel: "-",
+									status: "-",
+									code: "-",
+									message: "No delivery logs yet",
 								},
 							],
 			},
@@ -377,6 +588,17 @@ export const pluginDefinition = {
 								? (discoveryError?.message ??
 										"No Buffer channels found. Verify token permissions and connected channels in Buffer.")
 								: `Discovered ${channels.length} Buffer channel${channels.length === 1 ? "" : "s"}.`,
+						},
+					};
+				}
+
+				if (interaction?.type === "block_action" && interaction.action_id === "clear_delivery_logs") {
+					const clearedCount = await clearAllDeliveryLogs(ctx);
+					return {
+						...(await buildSettingsPage(ctx)),
+						toast: {
+							type: "success",
+							message: `Cleared ${clearedCount} delivery log${clearedCount === 1 ? "" : "s"}.`,
 						},
 					};
 				}

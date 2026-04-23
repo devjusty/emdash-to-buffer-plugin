@@ -8,6 +8,7 @@
 - Multi-channel fan-out
 - Automatic channel discovery from your Buffer account
 - Settings UI with discoverable channel table and on/off channel toggles
+- Delivery log table (latest attempts) with clear-log action
 - Template tags: `{title}`, `{url}`, `{excerpt}`
 - Featured image fallback to Open Graph image
 - Retries on transient API failures
@@ -38,6 +39,7 @@ Configure plugin settings in EmDash admin (`Plugins` -> `emdash-to-buffer` -> `S
 
 - Buffer access token
 - Discover channels and toggle enabled channels
+- View recent delivery attempts and clear the log
 - Message template
 - Enable/disable switch
 
