@@ -87,6 +87,17 @@ describe("content:afterSave hook", () => {
 			ctx,
 		);
 
+		expect(ctx.log.info).toHaveBeenCalledWith(
+			"emdash-to-buffer publish attempt",
+			expect.objectContaining({
+				hook: "content:afterSave",
+				collection: "posts",
+				contentId: "post-1",
+				contentStatus: "published",
+				hasBefore: true,
+				isNew: false,
+			}),
+		);
 		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});
 

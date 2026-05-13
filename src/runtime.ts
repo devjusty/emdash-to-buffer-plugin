@@ -19,6 +19,8 @@ interface PublishHookEvent {
 	content: Record<string, unknown>;
 }
 
+type PublishHookName = "content:afterSave" | "content:afterPublish";
+
 interface AdminInteraction {
 	type?: string;
 	page?: string;
@@ -95,6 +97,23 @@ async function appendDeliveryLog(ctx: PluginContext, record: DeliveryLogRecord):
 			message: error instanceof Error ? error.message : String(error),
 		});
 	}
+}
+
+function logPublishAttempt(
+	ctx: PluginContext,
+	hook: PublishHookName,
+	collection: string,
+	content: Record<string, unknown>,
+	metadata: { hasBefore: boolean; isNew: boolean; status: string | null },
+) {
+	ctx.log.info("emdash-to-buffer publish attempt", {
+		hook,
+		collection,
+		contentId: typeof content.id === "string" ? content.id : undefined,
+		contentStatus: metadata.status,
+		hasBefore: metadata.hasBefore,
+		isNew: metadata.isNew,
+	});
 }
 
 function normalizePathSlug(rawSlug: unknown): string {
@@ -293,19 +312,36 @@ async function getChannelsForPublishing(ctx: PluginContext, accessToken: string)
 export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): Promise<void> {
 	if (event.collection !== "posts") return;
 	if (!isFirstPublish(event)) return;
-	await handlePublishedContent(event.content, ctx);
+	await handlePublishedContent(event.collection, event.content, ctx, "content:afterSave", {
+		hasBefore: !!event.before,
+		isNew: event.isNew === true,
+	});
 }
 
-export async function handleAfterPublish(event: PublishHookEvent, ctx: PluginContext): Promise<void> {
+	export async function handleAfterPublish(event: PublishHookEvent, ctx: PluginContext): Promise<void> {
 	if (event.collection !== "posts") return;
-	await handlePublishedContent(event.content, ctx);
+	await handlePublishedContent(event.collection, event.content, ctx, "content:afterPublish", {
+		hasBefore: false,
+		isNew: false,
+	});
 }
 
-async function handlePublishedContent(content: Record<string, unknown>, ctx: PluginContext): Promise<void> {
+async function handlePublishedContent(
+	collection: string,
+	content: Record<string, unknown>,
+	ctx: PluginContext,
+	hook: PublishHookName,
+	metadata: { hasBefore: boolean; isNew: boolean },
+): Promise<void> {
 	if (content.status !== "published") return;
 
 	const postId = typeof content.id === "string" ? content.id : "";
 	const postSlug = typeof content.slug === "string" ? content.slug : "";
+	logPublishAttempt(ctx, hook, collection, content, {
+		hasBefore: metadata.hasBefore,
+		isNew: metadata.isNew,
+		status: typeof content.status === "string" ? content.status : null,
+	});
 
 	const enabled = (await ctx.kv.get<boolean>("settings:enabled")) ?? true;
 	if (!enabled) {

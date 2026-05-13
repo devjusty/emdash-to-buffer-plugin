@@ -15,8 +15,8 @@ describe("emdashToBufferPlugin descriptor", () => {
 		expect(descriptor.version).toBe(packageVersion);
 		expect(descriptor.format).toBe("standard");
 		expect(descriptor.entrypoint).toBe("emdash-to-buffer-plugin/sandbox");
-		expect(descriptor.capabilities).toContain("read:content");
-		expect(descriptor.capabilities).toContain("network:fetch");
+		expect(descriptor.capabilities).toContain("content:read");
+		expect(descriptor.capabilities).toContain("network:request");
 		expect(descriptor.allowedHosts).toEqual(["api.buffer.com", "api.bufferapp.com"]);
 		expect(descriptor.adminPages).toEqual([
 			{ path: "/settings", label: "Buffer Settings", icon: "gear" },
