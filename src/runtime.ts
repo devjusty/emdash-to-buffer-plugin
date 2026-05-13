@@ -45,6 +45,12 @@ interface DeliveryLogRecord {
 	message: string;
 }
 
+function getContentData(content: Record<string, unknown>): Record<string, unknown> {
+	const data = content.data;
+	if (data && typeof data === "object") return data as Record<string, unknown>;
+	return content;
+}
+
 async function pruneDeliveryLogs(ctx: PluginContext, maxItems: number): Promise<void> {
 	const deliveryLogs = ctx.storage?.delivery_logs;
 	if (!deliveryLogs) return;
@@ -298,15 +304,24 @@ async function discoverAndPersistChannels(ctx: PluginContext, accessToken: strin
 	}
 }
 
-async function getChannelsForPublishing(ctx: PluginContext, accessToken: string): Promise<string[]> {
+async function getChannelsForPublishing(ctx: PluginContext, accessToken: string): Promise<BufferChannel[]> {
 	const explicit = normalizeEnabledChannelIds(await ctx.kv.get<unknown>("settings:enabledChannelIds"));
-	if (explicit) return explicit;
-
 	const cached = await loadDiscoveredChannels(ctx);
-	if (cached.length > 0) return cached.map((channel) => channel.id);
+	if (explicit) {
+		if (explicit.length === 0) return [];
+		if (cached.length === 0) {
+			const discovered = await discoverAndPersistChannels(ctx, accessToken);
+			const selected = new Set(explicit);
+			return discovered.filter((channel) => selected.has(channel.id));
+		}
+		const selected = new Set(explicit);
+		return cached.filter((channel) => selected.has(channel.id));
+	}
+
+	if (cached.length > 0) return cached;
 
 	const discovered = await discoverAndPersistChannels(ctx, accessToken);
-	return discovered.map((channel) => channel.id);
+	return discovered;
 }
 
 export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): Promise<void> {
@@ -375,8 +390,8 @@ async function handlePublishedContent(
 		return;
 	}
 
-	const channelIds = await getChannelsForPublishing(ctx, accessToken);
-	if (channelIds.length === 0) {
+	const channels = await getChannelsForPublishing(ctx, accessToken);
+	if (channels.length === 0) {
 		ctx.log.warn("emdash-to-buffer skipped send because no Buffer channels are enabled");
 		await appendDeliveryLog(ctx, {
 			createdAt: new Date().toISOString(),
@@ -393,19 +408,34 @@ async function handlePublishedContent(
 		(await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title}{excerpt}{url}";
 	const siteUrl = await ctx.kv.get<string>("settings:siteUrl");
 	const url = buildPostUrl(siteUrl ?? null, content.slug);
+	const contentData = getContentData(content);
+	const imageUrl = pickBufferImageUrl(content);
+	const imageDebug = {
+		contentKeys: Object.keys(content),
+		dataKeys: contentData !== content ? Object.keys(contentData) : [],
+		seoKeys:
+			content.seo && typeof content.seo === "object"
+				? Object.keys(content.seo as Record<string, unknown>)
+				: contentData.seo && typeof contentData.seo === "object"
+					? Object.keys(contentData.seo as Record<string, unknown>)
+					: [],
+		pickedImageUrl: imageUrl ?? null,
+	};
+	ctx.log.info("emdash-to-buffer image extraction", imageDebug);
 	const text = renderMessageTemplate(messageTemplate, {
-		title: typeof content.title === "string" ? content.title : "",
+		title: typeof contentData.title === "string" ? contentData.title : "",
 		url,
-		excerpt: typeof content.excerpt === "string" ? content.excerpt : "",
+		excerpt: typeof contentData.excerpt === "string" ? contentData.excerpt : "",
 	});
-	const imageUrl = pickBufferImageUrl(content) ?? undefined;
-	for (const channelId of channelIds) {
+	for (const channel of channels) {
+		const channelId = channel.id;
 		const result = await sendBufferUpdate({
 			fetcher: ctx.http.fetch,
 			accessToken,
 			channelId,
+			channelService: channel.service,
 			text,
-			mediaUrl: imageUrl,
+			mediaUrl: imageUrl ?? undefined,
 			log: ctx.log,
 		});
 

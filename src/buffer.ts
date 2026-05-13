@@ -4,6 +4,7 @@ interface SendBufferUpdateArgs {
 	fetcher: (input: string, init?: RequestInit) => Promise<Response>;
 	accessToken: string;
 	channelId: string;
+	channelService?: string;
 	text: string;
 	mediaUrl?: string;
 	maxAttempts?: number;
@@ -56,6 +57,18 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => {
 		setTimeout(resolve, ms);
 	});
+}
+
+function buildChannelMetadata(service: string | undefined): Record<string, unknown> | undefined {
+	if (service === "facebook") {
+		return { facebook: { type: "post" } };
+	}
+
+	if (service === "googlebusiness") {
+		return { google: { type: "whats_new" } };
+	}
+
+	return undefined;
 }
 
 async function fetchGraphQL<T>(args: {
@@ -219,6 +232,7 @@ export async function sendBufferUpdate(args: SendBufferUpdateArgs): Promise<Buff
 	`;
 
 	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+		const metadata = buildChannelMetadata(args.channelService);
 		const result = await fetchGraphQL<{
 			createPost?:
 				| { post?: { id?: string; status?: string }; message?: never }
@@ -233,6 +247,7 @@ export async function sendBufferUpdate(args: SendBufferUpdateArgs): Promise<Buff
 					channelId: args.channelId,
 					schedulingType: "automatic",
 					mode: "addToQueue",
+					...(metadata ? { metadata } : {}),
 					...(args.mediaUrl ? { assets: { images: [{ url: args.mediaUrl }] } } : {}),
 				},
 			},

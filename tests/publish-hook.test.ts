@@ -19,8 +19,15 @@ function createContext(
 		["settings:enabled", true],
 		["settings:accessToken", "token-123"],
 		["settings:enabledChannelIds", ["p1", "p2"]],
-		["settings:messageTemplate", "{title} {url}"],
+		["settings:messageTemplate", "{title}{excerpt}{url}"],
 		["settings:siteUrl", "https://example.com"],
+		[
+			"state:discoveredChannels",
+			[
+				{ id: "p1", name: "LinkedIn", service: "linkedin", displayName: "linkedin" },
+				{ id: "p2", name: "LinkedIn 2", service: "linkedin", displayName: "linkedin" },
+			],
+		],
 	]);
 
 	if (overrides) {
@@ -30,7 +37,11 @@ function createContext(
 	}
 
 	const fetchMock = vi.fn(
-		fetchImpl ?? (async () => new Response(JSON.stringify({ data: { createPost: { post: { id: "p" } } } }), { status: 200 })),
+		fetchImpl ?? (async (_input: string, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body)) as { query?: string; variables?: Record<string, string> };
+
+			return new Response(JSON.stringify({ data: { createPost: { post: { id: "p" } } } }), { status: 200 });
+		}),
 	);
 	const putMock = vi.fn(storageOverrides?.put ?? (async () => {}));
 	const queryMock = vi.fn(storageOverrides?.query ?? (async () => ({ items: [], hasMore: false })));
@@ -64,6 +75,7 @@ function createContext(
 		putMock,
 		queryMock,
 		deleteManyMock,
+		kvData,
 	};
 }
 
@@ -78,8 +90,10 @@ describe("content:afterSave hook", () => {
 				content: {
 					id: "post-1",
 					slug: "hello-world",
-					title: "Hello World",
-					excerpt: "Excerpt",
+					data: {
+						title: "Hello World",
+						excerpt: "Excerpt",
+					},
 					status: "published",
 					published_at: "2026-04-21T00:00:00.000Z",
 				},
@@ -98,6 +112,21 @@ describe("content:afterSave hook", () => {
 				isNew: false,
 			}),
 		);
+		expect(ctx.log.info).toHaveBeenCalledWith(
+			"emdash-to-buffer image extraction",
+			expect.objectContaining({
+				pickedImageUrl: null,
+				contentKeys: expect.arrayContaining(["id", "slug", "data", "status", "published_at"]),
+				dataKeys: expect.arrayContaining(["title", "excerpt"]),
+			}),
+		);
+		const firstRequestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+			query?: string;
+			variables?: { input?: { text?: string } };
+		};
+		expect(firstRequestBody.variables?.input?.text).toContain("Hello World");
+		expect(firstRequestBody.variables?.input?.text).toContain("Excerpt");
+		expect(firstRequestBody.variables?.input?.text).toContain("https://example.com/hello-world");
 		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});
 
@@ -111,8 +140,10 @@ describe("content:afterSave hook", () => {
 				content: {
 					id: "post-1",
 					slug: "hello-world",
-					title: "Hello World",
-					excerpt: "Excerpt",
+					data: {
+						title: "Hello World",
+						excerpt: "Excerpt",
+					},
 					status: "published",
 					published_at: "2026-04-21T00:00:00.000Z",
 				},
@@ -142,8 +173,10 @@ describe("content:afterSave hook", () => {
 				content: {
 					id: "post-1",
 					slug: "hello-world",
-					title: "Hello World",
-					excerpt: "Excerpt",
+					data: {
+						title: "Hello World",
+						excerpt: "Excerpt",
+					},
 					status: "published",
 				},
 			},
@@ -162,8 +195,10 @@ describe("content:afterSave hook", () => {
 				content: {
 					id: "post-2",
 					slug: "published-from-workflow",
-					title: "Published from workflow",
-					excerpt: "Excerpt",
+					data: {
+						title: "Published from workflow",
+						excerpt: "Excerpt",
+					},
 					status: "published",
 				},
 			},
@@ -183,7 +218,7 @@ describe("content:afterSave hook", () => {
 				content: {
 					id: "page-1",
 					slug: "about",
-					title: "About",
+					data: { title: "About" },
 					status: "published",
 					published_at: "2026-04-21T00:00:00.000Z",
 				},
@@ -204,7 +239,7 @@ describe("content:afterSave hook", () => {
 				content: {
 					id: "post-1",
 					slug: "hello-world",
-					title: "Hello World updated",
+					data: { title: "Hello World updated" },
 					status: "published",
 					published_at: "2026-04-21T00:00:00.000Z",
 				},
@@ -252,7 +287,8 @@ describe("content:afterSave hook", () => {
 			);
 		};
 
-		const { ctx, fetchMock } = createContext({ "settings:enabledChannelIds": null }, fetchImpl);
+		const { ctx, fetchMock, kvData } = createContext({ "settings:enabledChannelIds": null }, fetchImpl);
+		kvData.set("state:discoveredChannels", []);
 
 		await handleAfterSave(
 			{
@@ -261,8 +297,10 @@ describe("content:afterSave hook", () => {
 				content: {
 					id: "post-1",
 					slug: "hello-world",
-					title: "Hello World",
-					excerpt: "Excerpt",
+					data: {
+						title: "Hello World",
+						excerpt: "Excerpt",
+					},
 					status: "published",
 					published_at: "2026-04-21T00:00:00.000Z",
 				},
@@ -271,6 +309,42 @@ describe("content:afterSave hook", () => {
 		);
 
 		expect(fetchMock).toHaveBeenCalledTimes(4);
+	});
+
+	it("sends channel-specific metadata for facebook and google business channels", async () => {
+		const { ctx, fetchMock, kvData } = createContext({ "settings:enabledChannelIds": null });
+		kvData.set("state:discoveredChannels", [
+			{ id: "fb-1", name: "Facebook", service: "facebook" },
+			{ id: "gb-1", name: "Google Business", service: "googlebusiness" },
+		]);
+
+		await handleAfterSave(
+			{
+				collection: "posts",
+				before: { status: "draft", published_at: null },
+				content: {
+					id: "post-9",
+					slug: "social-post",
+					data: {
+						title: "Social Post",
+						excerpt: "Snippet",
+					},
+					status: "published",
+					published_at: "2026-04-21T00:00:00.000Z",
+				},
+			},
+			ctx,
+		);
+
+		const facebookBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+			variables?: { input?: { metadata?: { facebook?: { type?: string } } } };
+		};
+		const googleBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as {
+			variables?: { input?: { metadata?: { google?: { type?: string } } } };
+		};
+
+		expect(facebookBody.variables?.input?.metadata?.facebook?.type).toBe("post");
+		expect(googleBody.variables?.input?.metadata?.google?.type).toBe("whats_new");
 	});
 
 	it("writes delivery log rows for successful and failed publish attempts", async () => {
@@ -296,8 +370,10 @@ describe("content:afterSave hook", () => {
 				content: {
 					id: "post-1",
 					slug: "hello-world",
-					title: "Hello World",
-					excerpt: "Excerpt",
+					data: {
+						title: "Hello World",
+						excerpt: "Excerpt",
+					},
 					status: "published",
 					published_at: "2026-04-21T00:00:00.000Z",
 				},
@@ -350,8 +426,10 @@ describe("content:afterSave hook", () => {
 				content: {
 					id: "post-1",
 					slug: "hello-world",
-					title: "Hello World",
-					excerpt: "Excerpt",
+					data: {
+						title: "Hello World",
+						excerpt: "Excerpt",
+					},
 					status: "published",
 					published_at: "2026-04-21T00:00:00.000Z",
 				},
@@ -408,8 +486,10 @@ describe("content:afterSave hook", () => {
 				content: {
 					id: "post-1",
 					slug: "hello-world",
-					title: "Hello World",
-					excerpt: "Excerpt",
+					data: {
+						title: "Hello World",
+						excerpt: "Excerpt",
+					},
 					status: "published",
 					published_at: "2026-04-21T00:00:00.000Z",
 				},
