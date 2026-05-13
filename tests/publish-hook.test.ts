@@ -55,6 +55,7 @@ function createContext(
 					kvData.set(key, value);
 				},
 			},
+			site: { url: "https://example.com" },
 			http: {
 				fetch: fetchMock,
 			},

@@ -5,6 +5,7 @@ interface SendBufferUpdateArgs {
 	accessToken: string;
 	channelId: string;
 	channelService?: string;
+	postUrl?: string;
 	text: string;
 	mediaUrl?: string;
 	maxAttempts?: number;
@@ -59,7 +60,10 @@ function sleep(ms: number): Promise<void> {
 	});
 }
 
-function buildChannelMetadata(service: string | undefined): Record<string, unknown> | undefined {
+function buildChannelMetadata(
+	service: string | undefined,
+	postUrl: string | undefined,
+): Record<string, unknown> | undefined {
 	const normalized = service?.toLowerCase() ?? "";
 
 	if (normalized.includes("facebook")) {
@@ -67,7 +71,15 @@ function buildChannelMetadata(service: string | undefined): Record<string, unkno
 	}
 
 	if (normalized.includes("google")) {
-		return { google: { type: "whats_new" } };
+		return {
+			google: {
+				type: "whats_new",
+				detailsWhatsNew: {
+					button: "learn_more",
+					...(postUrl ? { link: postUrl } : {}),
+				},
+			},
+		};
 	}
 
 	return undefined;
@@ -234,7 +246,7 @@ export async function sendBufferUpdate(args: SendBufferUpdateArgs): Promise<Buff
 	`;
 
 	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-		const metadata = buildChannelMetadata(args.channelService);
+		const metadata = buildChannelMetadata(args.channelService, args.postUrl);
 		const result = await fetchGraphQL<{
 			createPost?:
 				| { post?: { id?: string; status?: string }; message?: never }

@@ -3,7 +3,7 @@ import type { PluginDescriptor } from "emdash";
 export function emdashToBufferPlugin(): PluginDescriptor {
 	return {
 		id: "emdash-to-buffer",
-    version: "0.1.6-beta.3",
+		version: "0.1.7-beta.1",
 		format: "standard",
 		entrypoint: "emdash-to-buffer-plugin/sandbox",
 		options: {},

@@ -414,10 +414,10 @@ async function handlePublishedContent(
 
 	const messageTemplate =
 		(await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title}{excerpt}{url}";
-	const siteUrl = await ctx.kv.get<string>("settings:siteUrl");
-	const url = resolvePublishedUrl(content, siteUrl ?? null);
+	const siteUrl = ctx.site.url || (await ctx.kv.get<string>("settings:siteUrl")) || null;
+	const url = resolvePublishedUrl(content, siteUrl);
 	const contentData = getContentData(content);
-	const imageInspection = inspectBufferImageUrl(content, siteUrl ?? null);
+	const imageInspection = inspectBufferImageUrl(content, siteUrl);
 	const imageUrl = imageInspection.url;
 	const imageDebug = {
 		contentKeys: Object.keys(content),
@@ -431,7 +431,7 @@ async function handlePublishedContent(
 		pickedImageUrl: imageUrl ?? null,
 		pickedImageSource: imageInspection.source,
 		rawImageUrl: imageInspection.rawUrl,
-		postUrl: url,
+						postUrl: url,
 	};
 	ctx.log.info("emdash-to-buffer image extraction", imageDebug);
 	const text = renderMessageTemplate(messageTemplate, {
@@ -455,6 +455,7 @@ async function handlePublishedContent(
 			accessToken,
 			channelId,
 			channelService: channel.service,
+			postUrl: url,
 			text,
 			mediaUrl: imageUrl ?? undefined,
 			log: ctx.log,
