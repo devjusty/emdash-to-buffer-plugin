@@ -1,8 +1,9 @@
 import type { PluginContext } from "emdash";
 
 import { discoverChannels, sendBufferUpdate, type BufferChannel } from "./buffer.js";
-import { pickBufferImageUrl } from "./images.js";
+import { inspectBufferImageUrl } from "./images.js";
 import { renderMessageTemplate } from "./render.js";
+import type { DeliveryLogRecord } from "./types.js";
 
 interface PublishEvent {
 	collection: string;
@@ -33,22 +34,17 @@ interface DiscoveryErrorState {
 	timestamp: string;
 }
 
-type DeliveryLogStatus = "success" | "failed";
-
-interface DeliveryLogRecord {
-	createdAt: string;
-	status: DeliveryLogStatus;
-	postId: string;
-	postSlug: string;
-	channelId: string;
-	code?: string;
-	message: string;
-}
-
 function getContentData(content: Record<string, unknown>): Record<string, unknown> {
 	const data = content.data;
 	if (data && typeof data === "object") return data as Record<string, unknown>;
 	return content;
+}
+
+function getContentSeo(content: Record<string, unknown>): Record<string, unknown> | null {
+	if (content.seo && typeof content.seo === "object") return content.seo as Record<string, unknown>;
+	const data = getContentData(content);
+	if (data.seo && typeof data.seo === "object") return data.seo as Record<string, unknown>;
+	return null;
 }
 
 async function pruneDeliveryLogs(ctx: PluginContext, maxItems: number): Promise<void> {
@@ -122,20 +118,31 @@ function logPublishAttempt(
 	});
 }
 
-function normalizePathSlug(rawSlug: unknown): string {
-	const slug = typeof rawSlug === "string" ? rawSlug.trim() : "";
-	if (!slug) return "/";
-	return slug.startsWith("/") ? slug : `/${slug}`;
-}
-
-function buildPostUrl(siteUrl: string | null, slug: unknown): string {
-	const path = normalizePathSlug(slug);
+function resolveAbsoluteUrl(path: string, siteUrl: string | null): string {
 	if (!siteUrl) return path;
 	try {
 		return new URL(path, siteUrl).toString();
 	} catch {
 		return path;
 	}
+}
+
+function normalizePostSlug(rawSlug: unknown): string {
+	const slug = typeof rawSlug === "string" ? rawSlug.trim() : "";
+	return slug.replace(/^\/+/, "");
+}
+
+function resolvePublishedUrl(content: Record<string, unknown>, siteUrl: string | null): string {
+	const seo = getContentSeo(content);
+	const canonical = seo && typeof seo.canonical === "string" ? seo.canonical.trim() : "";
+	if (canonical.length > 0) {
+		if (/^https?:\/\//iu.test(canonical)) return canonical;
+		const canonicalPath = canonical.startsWith("/") ? canonical : `/${canonical}`;
+		return resolveAbsoluteUrl(canonicalPath, siteUrl);
+	}
+
+	const slug = normalizePostSlug(content.slug);
+	return resolveAbsoluteUrl(`/posts/${slug}`, siteUrl);
 }
 
 function isFirstPublish(event: PublishEvent): boolean {
@@ -226,6 +233,7 @@ async function loadRecentDeliveryLogs(ctx: PluginContext): Promise<DeliveryLogRe
 				postId: row.postId,
 				postSlug: row.postSlug,
 				channelId: row.channelId,
+				channelService: typeof row.channelService === "string" ? row.channelService : undefined,
 				code: typeof row.code === "string" ? row.code : undefined,
 				message: row.message,
 			});
@@ -407,9 +415,10 @@ async function handlePublishedContent(
 	const messageTemplate =
 		(await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title}{excerpt}{url}";
 	const siteUrl = await ctx.kv.get<string>("settings:siteUrl");
-	const url = buildPostUrl(siteUrl ?? null, content.slug);
+	const url = resolvePublishedUrl(content, siteUrl ?? null);
 	const contentData = getContentData(content);
-	const imageUrl = pickBufferImageUrl(content);
+	const imageInspection = inspectBufferImageUrl(content, siteUrl ?? null);
+	const imageUrl = imageInspection.url;
 	const imageDebug = {
 		contentKeys: Object.keys(content),
 		dataKeys: contentData !== content ? Object.keys(contentData) : [],
@@ -420,12 +429,24 @@ async function handlePublishedContent(
 					? Object.keys(contentData.seo as Record<string, unknown>)
 					: [],
 		pickedImageUrl: imageUrl ?? null,
+		pickedImageSource: imageInspection.source,
+		rawImageUrl: imageInspection.rawUrl,
+		postUrl: url,
 	};
 	ctx.log.info("emdash-to-buffer image extraction", imageDebug);
 	const text = renderMessageTemplate(messageTemplate, {
 		title: typeof contentData.title === "string" ? contentData.title : "",
 		url,
 		excerpt: typeof contentData.excerpt === "string" ? contentData.excerpt : "",
+	});
+	ctx.log.info("emdash-to-buffer publish payload", {
+		postId,
+		postSlug,
+		channelCount: channels.length,
+		textLength: text.length,
+		postUrl: url,
+		imageUrl,
+		imageSource: imageInspection.source,
 	});
 	for (const channel of channels) {
 		const channelId = channel.id;
@@ -443,29 +464,43 @@ async function handlePublishedContent(
 			await ctx.kv.set("state:lastError", {
 				timestamp: new Date().toISOString(),
 				channelId,
+				channelService: channel.service,
 				status: result.status ?? null,
 				error: result.error ?? "unknown",
 			});
-			ctx.log.error("emdash-to-buffer send failed", { channelId, status: result.status });
+			ctx.log.error("emdash-to-buffer send failed", {
+				channelId,
+				channelService: channel.service,
+				status: result.status,
+				error: result.error,
+			});
 			await appendDeliveryLog(ctx, {
 				createdAt: new Date().toISOString(),
 				status: "failed",
 				postId,
 				postSlug,
 				channelId,
+				channelService: channel.service,
 				code: typeof result.status === "number" ? String(result.status) : undefined,
 				message: result.error ?? "Unknown error",
 			});
 			continue;
 		}
 
-		ctx.log.info("emdash-to-buffer send succeeded", { channelId, status: result.status });
+		ctx.log.info("emdash-to-buffer send succeeded", {
+			channelId,
+			channelService: channel.service,
+			status: result.status,
+			postUrl: url,
+			imageUrl,
+		});
 		await appendDeliveryLog(ctx, {
 			createdAt: new Date().toISOString(),
 			status: "success",
 			postId,
 			postSlug,
 			channelId,
+			channelService: channel.service,
 			code: typeof result.status === "number" ? String(result.status) : undefined,
 			message: "Queued in Buffer",
 		});

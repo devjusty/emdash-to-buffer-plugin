@@ -23,4 +23,15 @@ describe("pickBufferImageUrl", () => {
 	it("returns null when no image fields are set", () => {
 		expect(pickBufferImageUrl({})).toBeNull();
 	});
+
+	it("resolves relative image URLs against siteUrl", () => {
+		expect(
+			pickBufferImageUrl(
+				{
+					featured_image: "/_emdash/api/media/file/01KNW11TNCSNDKZHNAVGRGB61R.jpg",
+				},
+				"https://example.com",
+			),
+		).toBe("https://example.com/_emdash/api/media/file/01KNW11TNCSNDKZHNAVGRGB61R.jpg");
+	});
 });

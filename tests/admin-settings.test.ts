@@ -47,7 +47,7 @@ function createContext(initial: Array<[string, unknown]> = []) {
 	};
 }
 
-describe("admin settings route", () => {
+	describe("admin settings route", () => {
 	it("loads settings page with discovered channel table and toggles", async () => {
 		const { ctx } = createContext([
 			["settings:accessToken", "token"],

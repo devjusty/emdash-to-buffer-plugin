@@ -10,6 +10,7 @@
 - Settings UI with discoverable channel table and on/off channel toggles
 - Delivery log table (latest attempts) with clear-log action
 - Template tags: `{title}`, `{url}`, `{excerpt}`
+- Canonical URL fallback to `/posts/{slug}`
 - Featured image fallback to Open Graph image
 - Retries on transient API failures
 

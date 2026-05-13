@@ -1,4 +1,3 @@
-// This module provides utility functions for working with images in the context of Buffer posts, including extracting image URLs from content objects and handling API interactions related to images.
 function asString(value: unknown): string | null {
 	if (typeof value !== "string") return null;
 	const trimmed = value.trim();
@@ -15,20 +14,57 @@ function getContentData(content: Record<string, unknown>): Record<string, unknow
 	return data ?? content;
 }
 
-// This function attempts to extract a suitable image URL from the given content object by checking various common properties that might contain image URLs, such as featured_image, og_image, and seo_og_image. It returns the first valid URL found or null if none are present.
-export function pickBufferImageUrl(content: Record<string, unknown>): string | null {
+function resolveImageUrl(rawUrl: string, siteUrl: string | null): string | null {
+	try {
+		const absolute = new URL(rawUrl);
+		return absolute.toString();
+	} catch {
+		if (!siteUrl) return null;
+		try {
+			return new URL(rawUrl, siteUrl).toString();
+		} catch {
+			return null;
+		}
+	}
+}
+
+interface BufferImageInspection {
+	url: string | null;
+	rawUrl: string | null;
+	source: string | null;
+}
+
+export function inspectBufferImageUrl(
+	content: Record<string, unknown>,
+	siteUrl: string | null = null,
+): BufferImageInspection {
 	const data = getContentData(content);
 	const seo = asRecord(content.seo) ?? asRecord(data.seo);
-	return (
-		asString(content.featured_image) ??
-		asString(content.featuredImage) ??
-		asString(content.og_image) ??
-		asString(content.seo_og_image) ??
-		asString(data.featured_image) ??
-		asString(data.featuredImage) ??
-		asString(data.og_image) ??
-		asString(data.seo_og_image) ??
-		asString(seo?.image) ??
-		null
-	);
+	const candidates = [
+		{ source: "featured_image", rawUrl: asString(content.featured_image) },
+		{ source: "featuredImage", rawUrl: asString(content.featuredImage) },
+		{ source: "og_image", rawUrl: asString(content.og_image) },
+		{ source: "seo_og_image", rawUrl: asString(content.seo_og_image) },
+		{ source: "data.featured_image", rawUrl: asString(data.featured_image) },
+		{ source: "data.featuredImage", rawUrl: asString(data.featuredImage) },
+		{ source: "data.og_image", rawUrl: asString(data.og_image) },
+		{ source: "data.seo_og_image", rawUrl: asString(data.seo_og_image) },
+		{ source: "seo.image", rawUrl: asString(seo?.image) },
+	];
+
+	for (const candidate of candidates) {
+		if (!candidate.rawUrl) continue;
+		const url = resolveImageUrl(candidate.rawUrl, siteUrl);
+		if (!url) continue;
+		return { url, rawUrl: candidate.rawUrl, source: candidate.source };
+	}
+
+	return { url: null, rawUrl: null, source: null };
+}
+
+export function pickBufferImageUrl(
+	content: Record<string, unknown>,
+	siteUrl: string | null = null,
+): string | null {
+	return inspectBufferImageUrl(content, siteUrl).url;
 }

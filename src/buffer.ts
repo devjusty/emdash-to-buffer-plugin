@@ -60,11 +60,13 @@ function sleep(ms: number): Promise<void> {
 }
 
 function buildChannelMetadata(service: string | undefined): Record<string, unknown> | undefined {
-	if (service === "facebook") {
+	const normalized = service?.toLowerCase() ?? "";
+
+	if (normalized.includes("facebook")) {
 		return { facebook: { type: "post" } };
 	}
 
-	if (service === "googlebusiness") {
+	if (normalized.includes("google")) {
 		return { google: { type: "whats_new" } };
 	}
 

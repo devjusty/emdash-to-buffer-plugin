@@ -11,3 +11,14 @@ export interface BufferSendResult {
 	status?: number;
 	error?: string;
 }
+
+export interface DeliveryLogRecord {
+	createdAt: string;
+	status: "success" | "failed";
+	postId: string;
+	postSlug: string;
+	channelId: string;
+	channelService?: string;
+	code?: string;
+	message: string;
+}

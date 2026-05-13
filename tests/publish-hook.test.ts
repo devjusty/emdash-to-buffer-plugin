@@ -126,7 +126,7 @@ describe("content:afterSave hook", () => {
 		};
 		expect(firstRequestBody.variables?.input?.text).toContain("Hello World");
 		expect(firstRequestBody.variables?.input?.text).toContain("Excerpt");
-		expect(firstRequestBody.variables?.input?.text).toContain("https://example.com/hello-world");
+		expect(firstRequestBody.variables?.input?.text).toContain("https://example.com/posts/hello-world");
 		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});
 
@@ -206,6 +206,55 @@ describe("content:afterSave hook", () => {
 		);
 
 		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("falls back to /posts/{slug} when no canonical URL is present", async () => {
+		const { ctx, fetchMock } = createContext();
+
+		await handleAfterSave(
+			{
+				collection: "posts",
+				before: { status: "draft", published_at: null },
+				content: {
+					id: "post-3",
+					slug: "hello-world",
+					data: { title: "Hello World", excerpt: "Excerpt" },
+					status: "published",
+					published_at: "2026-04-21T00:00:00.000Z",
+				},
+			},
+			ctx,
+		);
+
+		const firstRequestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+			variables?: { input?: { text?: string } };
+		};
+		expect(firstRequestBody.variables?.input?.text).toContain("https://example.com/posts/hello-world");
+	});
+
+	it("uses content canonical URL when present", async () => {
+		const { ctx, fetchMock } = createContext();
+
+		await handleAfterSave(
+			{
+				collection: "posts",
+				before: { status: "draft", published_at: null },
+				content: {
+					id: "post-4",
+					slug: "hello-world",
+					seo: { canonical: "/custom/hello-world" },
+					data: { title: "Hello World", excerpt: "Excerpt" },
+					status: "published",
+					published_at: "2026-04-21T00:00:00.000Z",
+				},
+			},
+			ctx,
+		);
+
+		const firstRequestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+			variables?: { input?: { text?: string } };
+		};
+		expect(firstRequestBody.variables?.input?.text).toContain("https://example.com/custom/hello-world");
 	});
 
 	it("skips non-post collections", async () => {
