@@ -34,4 +34,19 @@ describe("pickBufferImageUrl", () => {
 			),
 		).toBe("https://example.com/_emdash/api/media/file/01KNW11TNCSNDKZHNAVGRGB61R.jpg");
 	});
+
+	it("resolves MediaValue objects with storageKey", () => {
+		expect(
+			pickBufferImageUrl(
+				{
+					featured_image: {
+						provider: "local",
+						id: "01ABC",
+						meta: { storageKey: "01ABC.jpg" },
+					},
+				},
+				"https://example.com",
+			),
+		).toBe("https://example.com/_emdash/api/media/file/01ABC.jpg");
+	});
 });

@@ -33,6 +33,7 @@ describe("emdashToBufferPlugin descriptor", () => {
 	it("declares settings schema for token, template, and enabled", () => {
 		expect(pluginDefinition.admin.settingsSchema.accessToken.type).toBe("secret");
 		expect(pluginDefinition.admin.settingsSchema.messageTemplate.type).toBe("string");
+		expect(pluginDefinition.admin.settingsSchema.messageTemplate.default).toBe("{title}\n{excerpt}\n{url}");
 		expect(pluginDefinition.admin.settingsSchema.enabled.type).toBe("boolean");
 		expect(pluginDefinition.hooks["content:afterPublish"]).toBeDefined();
 		expect(pluginDefinition.admin.pages).toEqual([

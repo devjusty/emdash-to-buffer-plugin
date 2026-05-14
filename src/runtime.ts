@@ -413,7 +413,7 @@ async function handlePublishedContent(
 	}
 
 	const messageTemplate =
-		(await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title}{excerpt}{url}";
+		(await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title}\n{excerpt}\n{url}";
 	const siteUrl = ctx.site.url || (await ctx.kv.get<string>("settings:siteUrl")) || null;
 	const url = resolvePublishedUrl(content, siteUrl);
 	const contentData = getContentData(content);
@@ -511,7 +511,7 @@ async function handlePublishedContent(
 async function buildSettingsPage(ctx: PluginContext, options?: { refresh?: boolean }) {
 	const accessToken = await ctx.kv.get<string>("settings:accessToken");
 	const messageTemplate =
-		(await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title}{excerpt}{url}";
+		(await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title}\n{excerpt}\n{url}";
 	const enabled = (await ctx.kv.get<boolean>("settings:enabled")) ?? true;
 	const savedEnabledChannelIds = normalizeEnabledChannelIds(
 		await ctx.kv.get<unknown>("settings:enabledChannelIds"),
@@ -683,7 +683,7 @@ async function saveSettings(ctx: PluginContext, values: Record<string, unknown>)
 	const accessToken = typeof values.accessToken === "string" ? values.accessToken.trim() : "";
 	const enabledChannelIds = normalizeEnabledChannelIds(values.enabledChannelIds) ?? [];
 	const messageTemplate =
-		typeof values.messageTemplate === "string" ? values.messageTemplate : "{title}{excerpt}{url}";
+		typeof values.messageTemplate === "string" ? values.messageTemplate : "{title}\n{excerpt}\n{url}";
 	const enabled = typeof values.enabled === "boolean" ? values.enabled : true;
 
 	if (accessToken.length > 0) {
@@ -780,7 +780,7 @@ export const pluginDefinition = {
 				type: "string" as const,
 				label: "Message Template",
 				multiline: true,
-				default: "{title}{excerpt}{url}",
+				default: "{title}\n{excerpt}\n{url}",
 			},
 			enabled: {
 				type: "boolean" as const,
