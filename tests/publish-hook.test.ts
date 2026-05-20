@@ -258,6 +258,32 @@ describe("content:afterSave hook", () => {
 		expect(firstRequestBody.variables?.input?.text).toContain("https://example.com/custom/hello-world");
 	});
 
+	it("omits image assets for localhost image URLs", async () => {
+		const { ctx, fetchMock } = createContext();
+		ctx.site.url = "http://localhost:4321";
+
+		await handleAfterSave(
+			{
+				collection: "posts",
+				before: { status: "draft", published_at: null },
+				content: {
+					id: "post-5",
+					slug: "hello-local",
+					featured_image: "/_emdash/api/media/file/01LOCAL.jpg",
+					data: { title: "Hello Local", excerpt: "Excerpt" },
+					status: "published",
+					published_at: "2026-04-21T00:00:00.000Z",
+				},
+			},
+			ctx,
+		);
+
+		const firstRequestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+			variables?: { input?: { assets?: { images?: Array<{ url?: string }> } } };
+		};
+		expect(firstRequestBody.variables?.input?.assets).toBeUndefined();
+	});
+
 	it("skips non-post collections", async () => {
 		const { ctx, fetchMock } = createContext();
 

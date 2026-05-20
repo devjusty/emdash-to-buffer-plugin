@@ -85,6 +85,22 @@ function buildChannelMetadata(
 	return undefined;
 }
 
+function normalizeMediaUrl(mediaUrl: string | undefined): string | undefined {
+	if (!mediaUrl) return undefined;
+
+	try {
+		const url = new URL(mediaUrl);
+		if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+		const hostname = url.hostname.toLowerCase();
+		if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]") {
+			return undefined;
+		}
+		return url.toString();
+	} catch {
+		return undefined;
+	}
+}
+
 async function fetchGraphQL<T>(args: {
 	fetcher: (input: string, init?: RequestInit) => Promise<Response>;
 	accessToken: string;
@@ -229,6 +245,7 @@ export async function discoverChannelIds(args: {
 export async function sendBufferUpdate(args: SendBufferUpdateArgs): Promise<BufferSendResult> {
 	const maxAttempts = args.maxAttempts ?? 3;
 	const baseDelayMs = args.baseDelayMs ?? 500;
+	const mediaUrl = normalizeMediaUrl(args.mediaUrl);
 	const mutation = `
 		mutation CreatePost($input: CreatePostInput!) {
 			createPost(input: $input) {
@@ -262,7 +279,7 @@ export async function sendBufferUpdate(args: SendBufferUpdateArgs): Promise<Buff
 					schedulingType: "automatic",
 					mode: "addToQueue",
 					...(metadata ? { metadata } : {}),
-					...(args.mediaUrl ? { assets: { images: [{ url: args.mediaUrl }] } } : {}),
+					...(mediaUrl ? { assets: { images: [{ url: mediaUrl }] } } : {}),
 				},
 			},
 		});
