@@ -4,7 +4,7 @@ import { handleAdminInteraction, pluginDefinition } from "./runtime.js";
 
 export default definePlugin({
 	id: "emdash-to-buffer",
-	version: "0.1.8-beta.1",
+	version: "0.1.8-beta.2",
 	capabilities: ["content:read", "network:request"],
 	allowedHosts: ["api.buffer.com", "api.bufferapp.com"],
 	storage: {
