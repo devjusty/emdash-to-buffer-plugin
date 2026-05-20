@@ -1,4 +1,5 @@
 import type { PluginContext } from "emdash";
+import type { SandboxedPlugin } from "emdash/plugin";
 
 import { discoverChannels, sendBufferUpdate, type BufferChannel } from "./buffer.js";
 import { inspectBufferImageUrl } from "./images.js";
@@ -700,6 +701,56 @@ async function saveSettings(ctx: PluginContext, values: Record<string, unknown>)
 	};
 }
 
+export async function handleAdminInteraction(interaction: AdminInteraction | null, ctx: PluginContext) {
+	if (interaction?.type === "page_load" && interaction.page === "/settings") {
+		return buildSettingsPage(ctx);
+	}
+
+	if (interaction?.type === "block_action" && interaction.action_id === "discover_channels") {
+		const accessToken = await ctx.kv.get<string>("settings:accessToken");
+		if (!accessToken || !ctx.http) {
+			return {
+				...(await buildSettingsPage(ctx)),
+				toast: {
+					type: "error",
+					message: "Add and save your Buffer access token first.",
+				},
+			};
+		}
+
+		const channels = await discoverAndPersistChannels(ctx, accessToken);
+		const isError = channels.length === 0;
+		const discoveryError = parseDiscoveryError(await ctx.kv.get<unknown>("state:lastDiscoveryError"));
+		return {
+			...(await buildSettingsPage(ctx)),
+			toast: {
+				type: isError ? "error" : "success",
+				message: isError
+					? (discoveryError?.message ??
+							"No Buffer channels found. Verify token permissions and connected channels in Buffer.")
+					: `Discovered ${channels.length} Buffer channel${channels.length === 1 ? "" : "s"}.`,
+			},
+		};
+	}
+
+	if (interaction?.type === "block_action" && interaction.action_id === "clear_delivery_logs") {
+		const clearedCount = await clearAllDeliveryLogs(ctx);
+		return {
+			...(await buildSettingsPage(ctx)),
+			toast: {
+				type: "success",
+				message: `Cleared ${clearedCount} delivery log${clearedCount === 1 ? "" : "s"}.`,
+			},
+		};
+	}
+
+	if (interaction?.type === "form_submit" && interaction.action_id === "save_settings") {
+		return saveSettings(ctx, interaction.values ?? {});
+	}
+
+	return { blocks: [] };
+}
+
 export const pluginDefinition = {
 	hooks: {
 		"content:afterSave": {
@@ -715,78 +766,8 @@ export const pluginDefinition = {
 		admin: {
 			handler: async (routeCtx: { input: unknown }, ctx: PluginContext) => {
 				const interaction = (routeCtx.input as AdminInteraction | null) ?? null;
-
-				if (interaction?.type === "page_load" && interaction.page === "/settings") {
-					return buildSettingsPage(ctx);
-				}
-
-				if (interaction?.type === "block_action" && interaction.action_id === "discover_channels") {
-					const accessToken = await ctx.kv.get<string>("settings:accessToken");
-					if (!accessToken || !ctx.http) {
-						return {
-							...(await buildSettingsPage(ctx)),
-							toast: {
-								type: "error",
-								message: "Add and save your Buffer access token first.",
-							},
-						};
-					}
-
-					const channels = await discoverAndPersistChannels(ctx, accessToken);
-					const isError = channels.length === 0;
-					const discoveryError = parseDiscoveryError(
-						await ctx.kv.get<unknown>("state:lastDiscoveryError"),
-					);
-					return {
-						...(await buildSettingsPage(ctx)),
-						toast: {
-							type: isError ? "error" : "success",
-							message: isError
-								? (discoveryError?.message ??
-										"No Buffer channels found. Verify token permissions and connected channels in Buffer.")
-								: `Discovered ${channels.length} Buffer channel${channels.length === 1 ? "" : "s"}.`,
-						},
-					};
-				}
-
-				if (interaction?.type === "block_action" && interaction.action_id === "clear_delivery_logs") {
-					const clearedCount = await clearAllDeliveryLogs(ctx);
-					return {
-						...(await buildSettingsPage(ctx)),
-						toast: {
-							type: "success",
-							message: `Cleared ${clearedCount} delivery log${clearedCount === 1 ? "" : "s"}.`,
-						},
-					};
-				}
-
-				if (interaction?.type === "form_submit" && interaction.action_id === "save_settings") {
-					return saveSettings(ctx, interaction.values ?? {});
-				}
-
-				return { blocks: [] };
+				return handleAdminInteraction(interaction, ctx);
 			},
 		},
 	},
-	admin: {
-		pages: [{ path: "/settings", label: "Buffer Settings", icon: "gear" }],
-		settingsSchema: {
-			accessToken: {
-				type: "secret" as const,
-				label: "Buffer Access Token",
-				description: "Personal access token used for Buffer API requests.",
-			},
-			messageTemplate: {
-				type: "string" as const,
-				label: "Message Template",
-				multiline: true,
-				default: "{title}\n{excerpt}\n{url}",
-			},
-			enabled: {
-				type: "boolean" as const,
-				label: "Enable Buffer Posting",
-				default: true,
-			},
-		},
-	},
-};
+} satisfies SandboxedPlugin;

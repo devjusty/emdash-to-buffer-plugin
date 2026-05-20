@@ -36,6 +36,8 @@ export default defineConfig({
 });
 ```
 
+Native installs can import `emdash-to-buffer-plugin/native` as a ready-to-use native plugin export.
+
 Configure plugin settings in EmDash admin (`Plugins` -> `emdash-to-buffer` -> `Settings`):
 
 - Buffer access token

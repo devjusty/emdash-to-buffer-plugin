@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { emdashToBufferPlugin } from "../src/index.js";
+import nativePlugin from "../src/native-entry.js";
 import { pluginDefinition } from "../src/runtime.js";
 
 const packageJsonPath = fileURLToPath(new URL("../package.json", import.meta.url));
@@ -31,14 +32,18 @@ describe("emdashToBufferPlugin descriptor", () => {
 	});
 
 	it("declares settings schema for token, template, and enabled", () => {
-		expect(pluginDefinition.admin.settingsSchema.accessToken.type).toBe("secret");
-		expect(pluginDefinition.admin.settingsSchema.messageTemplate.type).toBe("string");
-		expect(pluginDefinition.admin.settingsSchema.messageTemplate.default).toBe("{title}\n{excerpt}\n{url}");
-		expect(pluginDefinition.admin.settingsSchema.enabled.type).toBe("boolean");
 		expect(pluginDefinition.hooks["content:afterPublish"]).toBeDefined();
-		expect(pluginDefinition.admin.pages).toEqual([
+		expect(pluginDefinition.routes.admin).toBeDefined();
+		expect(nativePlugin.id).toBe("emdash-to-buffer");
+		expect(nativePlugin.version).toBe(packageVersion);
+		expect(nativePlugin.admin?.settingsSchema?.accessToken?.type).toBe("secret");
+		expect(nativePlugin.admin?.settingsSchema?.messageTemplate?.type).toBe("string");
+		expect((nativePlugin.admin?.settingsSchema?.messageTemplate as { default?: string } | undefined)?.default).toBe(
+			"{title}\n{excerpt}\n{url}",
+		);
+		expect(nativePlugin.admin?.settingsSchema?.enabled?.type).toBe("boolean");
+		expect(nativePlugin.admin?.pages).toEqual([
 			{ path: "/settings", label: "Buffer Settings", icon: "gear" },
 		]);
-		expect(pluginDefinition.routes.admin).toBeDefined();
 	});
 });
