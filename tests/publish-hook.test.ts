@@ -284,6 +284,34 @@ describe("content:afterSave hook", () => {
 		expect(firstRequestBody.variables?.input?.assets).toBeUndefined();
 	});
 
+	it("uses Buffer's new single-image asset input shape", async () => {
+		const { ctx, fetchMock } = createContext();
+
+		await handleAfterSave(
+			{
+				collection: "posts",
+				before: { status: "draft", published_at: null },
+				content: {
+					id: "post-6",
+					slug: "hello-image",
+					featured_image: "https://cdn.example.com/featured.jpg",
+					data: { title: "Hello Image", excerpt: "Excerpt" },
+					status: "published",
+					published_at: "2026-04-21T00:00:00.000Z",
+				},
+			},
+			ctx,
+		);
+
+		const firstRequestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+			variables?: { input?: { assets?: { image?: { url?: string }; images?: Array<{ url?: string }> } } };
+		};
+		expect(firstRequestBody.variables?.input?.assets).toEqual({
+			image: { url: "https://cdn.example.com/featured.jpg" },
+		});
+		expect(firstRequestBody.variables?.input?.assets?.images).toBeUndefined();
+	});
+
 	it("skips non-post collections", async () => {
 		const { ctx, fetchMock } = createContext();
 
@@ -314,6 +342,26 @@ describe("content:afterSave hook", () => {
 				before: { status: "published", published_at: "2026-04-21T00:00:00.000Z" },
 				content: {
 					id: "post-1",
+					slug: "hello-world",
+					data: { title: "Hello World updated" },
+					status: "published",
+					published_at: "2026-04-21T00:00:00.000Z",
+				},
+			},
+			ctx,
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(0);
+	});
+
+	it("skips published saves without a before payload", async () => {
+		const { ctx, fetchMock } = createContext();
+
+		await handleAfterSave(
+			{
+				collection: "posts",
+				content: {
+					id: "post-7",
 					slug: "hello-world",
 					data: { title: "Hello World updated" },
 					status: "published",

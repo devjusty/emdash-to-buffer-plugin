@@ -279,7 +279,7 @@ export async function sendBufferUpdate(args: SendBufferUpdateArgs): Promise<Buff
 					schedulingType: "automatic",
 					mode: "addToQueue",
 					...(metadata ? { metadata } : {}),
-					...(mediaUrl ? { assets: { images: [{ url: mediaUrl }] } } : {}),
+					...(mediaUrl ? { assets: { image: { url: mediaUrl } } } : {}),
 				},
 			},
 		});

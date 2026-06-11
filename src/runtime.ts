@@ -150,19 +150,15 @@ function isFirstPublish(event: PublishEvent): boolean {
 	if (event.content.status !== "published") return false;
 	if (event.isNew === true) return true;
 
-	if (event.before?.status && event.before.status !== "published") {
+	if (!event.before) {
+		return false;
+	}
+
+	if (event.before.status && event.before.status !== "published") {
 		return true;
 	}
 
-	if (!event.before) {
-		return typeof event.content.published_at === "string";
-	}
-
-	const previousPublishedAt = event.before?.published_at ?? null;
-	const currentPublishedAt =
-		typeof event.content.published_at === "string" ? event.content.published_at : null;
-
-	return previousPublishedAt !== currentPublishedAt;
+	return false;
 }
 
 function normalizeEnabledChannelIds(value: unknown): string[] | null {
