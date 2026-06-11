@@ -2,6 +2,8 @@
 
 [EmDash](https://github.com/emdash-cms/emdash) plugin that queues first-time published `posts` entries to [Buffer](https://buffer.com/).
 
+This plugin is under active development. It is currently only confirmed to work with LinkedIn, Google Business, and Facebook. If you use another channel and hit an error, please [open an issue on GitHub](https://github.com/devjusty/emdash-to-buffer-plugin/issues). Contributions are welcome.
+
 ## Features
 
 - Publish-only trigger for `posts`
@@ -28,11 +30,11 @@ import emdash from "emdash";
 import { emdashToBufferPlugin } from "emdash-to-buffer-plugin";
 
 export default defineConfig({
-	integrations: [
-		emdash({
-			plugins: [emdashToBufferPlugin()],
-		}),
-	],
+  integrations: [
+    emdash({
+      plugins: [emdashToBufferPlugin()],
+    }),
+  ],
 });
 ```
 
