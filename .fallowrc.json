@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "entry": [
+    "src/index.ts",
+    "src/sandbox-entry.ts",
+    "src/native-entry.ts"
+  ],
+  "ignorePatterns": [
+    "**/.agents/**",
+    "**/.claude/**"
+  ],
+  "ignoreDependencies": [
+    "@types/node"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "duplicates": {
+    "mode": "mild",
+    "minOccurrences": 3,
+    "ignore": [
+      "**/.agents/**",
+      "**/.claude/**"
+    ]
+  },
+  "rules": {
+    "unused-dependencies": "warn",
+    "private-type-leaks": "warn"
+  },
+  "audit": {
+    "gate": "new-only"
+  }
+}
