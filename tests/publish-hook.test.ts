@@ -111,7 +111,10 @@ const publishedPost = {
 		excerpt: "Excerpt",
 	},
 	status: "published",
-	published_at: "2026-04-21T00:00:00.000Z",
+	// Fresh publish timestamp: the delivery gate treats posts that went live
+	// before this install started observing publishes as republishes.
+	published_at: new Date().toISOString(),
+	updated_at: new Date().toISOString(),
 };
 
 describe("content:afterPublish hook", () => {
@@ -182,8 +185,100 @@ describe("content:afterPublish hook", () => {
 
 		expect(fetchMock).toHaveBeenCalledTimes(0);
 		expect(ctx.log.info).toHaveBeenCalledWith(
-			"emdash-to-buffer skipped send; already delivered",
-			expect.objectContaining({ postId: "post-1" }),
+			"emdash-to-buffer skipped send; not a first publish",
+			expect.objectContaining({
+				postId: "post-1",
+				reason: "already delivered",
+			}),
+		);
+	});
+
+	it("skips republishes of posts that went live before this install", async () => {
+		const { ctx, fetchMock, kvData } = createContext({
+			"state:watchSince": "2026-04-25T00:00:00.000Z",
+		});
+
+		await handleAfterPublish(
+			{
+				collection: "posts",
+				content: {
+					id: "post-old",
+					slug: "hello-world",
+					data: { title: "Hello World", excerpt: "Excerpt" },
+					status: "published",
+					published_at: "2026-04-21T00:00:00.000Z",
+					updated_at: new Date().toISOString(),
+				},
+			},
+			ctx,
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(0);
+		expect(ctx.log.info).toHaveBeenCalledWith(
+			"emdash-to-buffer skipped send; not a first publish",
+			expect.objectContaining({
+				postId: "post-old",
+				reason: "published before this install started tracking deliveries",
+			}),
+		);
+		// Claimed so later republishes short-circuit without re-deriving the date.
+		expect(kvData.get("state:delivered:post-old")).toEqual(
+			expect.objectContaining({ hook: "content:afterPublish" }),
+		);
+	});
+
+	it("records the observation watermark on the first publish event it sees", async () => {
+		const { ctx, fetchMock, kvData } = createContext();
+
+		await handleAfterPublish(
+			{ collection: "posts", content: publishedPost },
+			ctx,
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(typeof kvData.get("state:watchSince")).toBe("string");
+	});
+
+	it("keeps sending republishes when repostOnRepublish is enabled", async () => {
+		const { ctx, fetchMock } = createContext({
+			"settings:repostOnRepublish": true,
+			"state:watchSince": "2026-04-25T00:00:00.000Z",
+			"state:delivered:post-1": {
+				at: "2026-04-26T00:00:00.000Z",
+				hook: "content:afterPublish",
+				updatedAt: "2026-04-26T00:00:00.000Z",
+			},
+		});
+
+		await handleAfterPublish(
+			{ collection: "posts", content: publishedPost },
+			ctx,
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("does not resend the same revision twice when repostOnRepublish is enabled", async () => {
+		const { ctx, fetchMock } = createContext({
+			"settings:repostOnRepublish": true,
+			"state:delivered:post-1": {
+				at: publishedPost.updated_at,
+				hook: "content:afterPublish",
+				updatedAt: publishedPost.updated_at,
+			},
+		});
+
+		await handleAfterPublish(
+			{ collection: "posts", content: publishedPost },
+			ctx,
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(0);
+		expect(ctx.log.info).toHaveBeenCalledWith(
+			"emdash-to-buffer skipped send; not a first publish",
+			expect.objectContaining({
+				reason: "already delivered for this revision",
+			}),
 		);
 	});
 

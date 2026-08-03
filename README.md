@@ -7,7 +7,8 @@ This plugin is under active development. It is currently only confirmed to work 
 ## Features
 
 - Triggers on `content:afterPublish` (draft → live) and create-as-published saves
-- Skips republish-after-unpublish by default (per-post delivery claim)
+- Sends once, on a post's first publish. Republishing a live post, republishing after an unpublish, and posts that were already live when the plugin was installed are all skipped by default
+- Optional `Send again when a published post is republished` toggle for teams that do want a new Buffer update per republish
 - Multi-channel fan-out
 - Automatic channel discovery from your Buffer account
 - Settings UI with discoverable channel table and on/off channel toggles
@@ -51,6 +52,7 @@ Configure plugin settings in EmDash admin (`Plugins` → `emdash-to-buffer` → 
 - View recent delivery attempts and clear the log
 - Message template
 - Enable/disable switch
+- Resend-on-republish switch (off by default)
 
 ## Breaking changes in 1.1.0
 

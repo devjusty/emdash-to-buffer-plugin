@@ -22,6 +22,7 @@
 
 - Publish only `posts`: `content:afterPublish` handles draft-to-live; `content:afterSave` handles create-as-published only (`isNew === true`).
 - Delivery claims use `state:delivered:{postId}` before sending, preventing duplicate queueing and republish-after-unpublish by default. Preserve this unless behavior and tests are intentionally changed together.
+- First-publish-only is the default. `content:afterPublish` re-fires on every republish with no previous-state information, so the `state:watchSince` watermark treats any post whose `publishedAt` predates it as already-published and claims it without sending. `settings:repostOnRepublish` is the opt-out and dedupes per revision on the claim's `updatedAt`.
 - Channel selection distinguishes missing channel settings from an explicit empty list. An explicit empty `settings:enabledChannelIds` means send to no channels.
 - Default template is `{title}\n{excerpt}\n{url}`. Canonical URL wins; fallback is `/posts/{slug}` resolved against `ctx.site.url`, then stored `settings:siteUrl`.
 - Buffer image assets must be absolute HTTP(S) URLs; localhost and loopback URLs are intentionally omitted.

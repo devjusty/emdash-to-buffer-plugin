@@ -111,6 +111,49 @@ describe("admin settings route", () => {
 		expect(kvData.get("settings:enabledChannelIds")).toEqual(["chan-2"]);
 	});
 
+	it("round-trips the repost-on-republish toggle, defaulting to off", async () => {
+		const { ctx, kvData } = createContext([
+			["settings:accessToken", "token"],
+			["settings:enabled", true],
+		]);
+
+		const beforeSave = (await pluginDefinition.routes.admin.handler(
+			{ input: { type: "page_load", page: "/settings" } },
+			ctx,
+		)) as any;
+		const initialField = beforeSave.blocks
+			.find((block: any) => block.type === "form")
+			.fields.find((field: any) => field.action_id === "repostOnRepublish");
+		expect(initialField.initial_value).toBe(false);
+
+		await pluginDefinition.routes.admin.handler(
+			{
+				input: {
+					type: "form_submit",
+					action_id: "save_settings",
+					values: {
+						enabledChannelIds: ["chan-2"],
+						messageTemplate: "{title} {url}",
+						enabled: true,
+						repostOnRepublish: true,
+					},
+				},
+			},
+			ctx,
+		);
+
+		expect(kvData.get("settings:repostOnRepublish")).toBe(true);
+
+		const afterSave = (await pluginDefinition.routes.admin.handler(
+			{ input: { type: "page_load", page: "/settings" } },
+			ctx,
+		)) as any;
+		const savedField = afterSave.blocks
+			.find((block: any) => block.type === "form")
+			.fields.find((field: any) => field.action_id === "repostOnRepublish");
+		expect(savedField.initial_value).toBe(true);
+	});
+
 	it("renders delivery log table rows newest-first", async () => {
 		const { ctx } = createContext([
 			["settings:accessToken", "token"],

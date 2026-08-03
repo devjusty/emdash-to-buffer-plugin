@@ -16,6 +16,23 @@ import type { DeliveryLogRecord } from "./types.js";
 
 type PublishHookName = "content:afterSave" | "content:afterPublish";
 
+const watchSinceKey = "state:watchSince";
+
+/**
+ * Slack applied when the watermark is first written. The publish that
+ * establishes the watermark stamped `published_at` moments earlier, so the
+ * watermark has to sit slightly in the past for that post to still count as a
+ * first publish.
+ */
+const watchSinceMarginMs = 2 * 60 * 1000;
+
+interface DeliveryClaim {
+	at: string;
+	hook: PublishHookName;
+	/** Content `updatedAt` at claim time, used to dedupe repeat republish sends. */
+	updatedAt?: string;
+}
+
 function deliveredKey(postId: string): string {
 	return `state:delivered:${postId}`;
 }
@@ -49,6 +66,119 @@ function getContentSeo(
 	if (data.seo && typeof data.seo === "object")
 		return data.seo as Record<string, unknown>;
 	return null;
+}
+
+function pickTimestamp(
+	content: Record<string, unknown>,
+	keys: readonly string[],
+): string | null {
+	const data = getContentData(content);
+	const sources = data === content ? [content] : [content, data];
+	for (const source of sources) {
+		for (const key of keys) {
+			const value = source[key];
+			if (typeof value === "string" && value.trim().length > 0) return value;
+		}
+	}
+	return null;
+}
+
+function parseTimestampMs(value: string | null): number | null {
+	if (value === null) return null;
+	const parsed = Date.parse(value);
+	return Number.isNaN(parsed) ? null : parsed;
+}
+
+function getPublishedAt(content: Record<string, unknown>): string | null {
+	return pickTimestamp(content, ["publishedAt", "published_at"]);
+}
+
+function getUpdatedAt(content: Record<string, unknown>): string | null {
+	return pickTimestamp(content, ["updatedAt", "updated_at"]);
+}
+
+function parseDeliveryClaim(
+	value: unknown,
+): { updatedAt: string | null } | null {
+	if (!value || typeof value !== "object") return null;
+	const row = value as Record<string, unknown>;
+	return {
+		updatedAt: typeof row.updatedAt === "string" ? row.updatedAt : null,
+	};
+}
+
+async function recordDeliveryClaim(
+	ctx: PluginContext,
+	postId: string,
+	hook: PublishHookName,
+	updatedAt: string | null,
+): Promise<void> {
+	if (!postId) return;
+	const claim: DeliveryClaim = { at: new Date().toISOString(), hook };
+	if (updatedAt !== null) claim.updatedAt = updatedAt;
+	await ctx.kv.set(deliveredKey(postId), claim);
+}
+
+/**
+ * Timestamp from which this install started observing publishes. Written once,
+ * on the first publish event the plugin sees.
+ */
+async function resolveWatchSince(ctx: PluginContext): Promise<number> {
+	const stored = await ctx.kv.get<string>(watchSinceKey);
+	const storedMs = parseTimestampMs(typeof stored === "string" ? stored : null);
+	if (storedMs !== null) return storedMs;
+
+	const watchSince = Date.now() - watchSinceMarginMs;
+	await ctx.kv.set(watchSinceKey, new Date(watchSince).toISOString());
+	return watchSince;
+}
+
+/**
+ * Decides whether this publish event is the post's first publish.
+ *
+ * EmDash re-fires `content:afterPublish` every time a live post is republished
+ * and the event carries no previous state, so first-publish has to be
+ * reconstructed from plugin state: the per-post delivery claim, plus the
+ * observation watermark. A post whose `publishedAt` predates the watermark was
+ * already live before this install could claim it.
+ */
+async function evaluateDeliveryGate(
+	ctx: PluginContext,
+	content: Record<string, unknown>,
+	postId: string,
+	hook: PublishHookName,
+	watchSinceMs: number,
+): Promise<{ deliver: boolean; reason: string }> {
+	const repostOnRepublish =
+		(await ctx.kv.get<boolean>("settings:repostOnRepublish")) === true;
+	const updatedAt = getUpdatedAt(content);
+	const claim = postId
+		? parseDeliveryClaim(await ctx.kv.get<unknown>(deliveredKey(postId)))
+		: null;
+
+	if (claim) {
+		if (!repostOnRepublish)
+			return { deliver: false, reason: "already delivered" };
+		if (updatedAt !== null && claim.updatedAt === updatedAt)
+			return { deliver: false, reason: "already delivered for this revision" };
+		return {
+			deliver: true,
+			reason: "republish with repostOnRepublish enabled",
+		};
+	}
+
+	if (!repostOnRepublish) {
+		const publishedAtMs = parseTimestampMs(getPublishedAt(content));
+		if (publishedAtMs !== null && publishedAtMs < watchSinceMs) {
+			await recordDeliveryClaim(ctx, postId, hook, updatedAt);
+			return {
+				deliver: false,
+				reason: "published before this install started tracking deliveries",
+			};
+		}
+	}
+
+	return { deliver: true, reason: "first publish" };
 }
 
 async function pruneDeliveryLogs(
@@ -404,6 +534,10 @@ async function handlePublishedContent(
 		status: typeof content.status === "string" ? content.status : null,
 	});
 
+	// Established before the settings checks below so a post published while the
+	// plugin is unconfigured still counts as a first publish once it is fixed.
+	const watchSinceMs = await resolveWatchSince(ctx);
+
 	const enabled = (await ctx.kv.get<boolean>("settings:enabled")) ?? true;
 	if (!enabled) {
 		await appendDeliveryLog(ctx, {
@@ -452,22 +586,24 @@ async function handlePublishedContent(
 		return;
 	}
 
-	// Claim before send so afterSave + afterPublish cannot double-queue.
-	// Persists across unpublish → republish (repostOnRepublish setting TBD).
-	if (postId) {
-		const existing = await ctx.kv.get<unknown>(deliveredKey(postId));
-		if (existing) {
-			ctx.log.info("emdash-to-buffer skipped send; already delivered", {
-				postId,
-				hook,
-			});
-			return;
-		}
-		await ctx.kv.set(deliveredKey(postId), {
-			at: new Date().toISOString(),
+	// Claim before send so afterSave + afterPublish cannot double-queue, and so
+	// republishes and unpublish → republish stay quiet by default.
+	const gate = await evaluateDeliveryGate(
+		ctx,
+		content,
+		postId,
+		hook,
+		watchSinceMs,
+	);
+	if (!gate.deliver) {
+		ctx.log.info("emdash-to-buffer skipped send; not a first publish", {
+			postId,
 			hook,
+			reason: gate.reason,
 		});
+		return;
 	}
+	await recordDeliveryClaim(ctx, postId, hook, getUpdatedAt(content));
 
 	const messageTemplate =
 		(await ctx.kv.get<string>("settings:messageTemplate")) ??
@@ -578,6 +714,8 @@ async function buildSettingsPage(
 		(await ctx.kv.get<string>("settings:messageTemplate")) ??
 		"{title}\n{excerpt}\n{url}";
 	const enabled = (await ctx.kv.get<boolean>("settings:enabled")) ?? true;
+	const repostOnRepublish =
+		(await ctx.kv.get<boolean>("settings:repostOnRepublish")) === true;
 	const savedEnabledChannelIds = normalizeEnabledChannelIds(
 		await ctx.kv.get<unknown>("settings:enabledChannelIds"),
 	);
@@ -745,6 +883,12 @@ async function buildSettingsPage(
 						label: "Enable Buffer Posting",
 						initial_value: enabled,
 					},
+					{
+						type: "toggle",
+						action_id: "repostOnRepublish",
+						label: "Send again when a published post is republished",
+						initial_value: repostOnRepublish,
+					},
 				],
 				submit: { label: "Save Settings", action_id: "save_settings" },
 			},
@@ -765,6 +909,7 @@ async function saveSettings(
 			? values.messageTemplate
 			: "{title}\n{excerpt}\n{url}";
 	const enabled = typeof values.enabled === "boolean" ? values.enabled : true;
+	const repostOnRepublish = values.repostOnRepublish === true;
 
 	if (accessToken.length > 0) {
 		await ctx.kv.set("settings:accessToken", accessToken);
@@ -773,6 +918,7 @@ async function saveSettings(
 	await ctx.kv.set("settings:enabledChannelIds", enabledChannelIds);
 	await ctx.kv.set("settings:messageTemplate", messageTemplate);
 	await ctx.kv.set("settings:enabled", enabled);
+	await ctx.kv.set("settings:repostOnRepublish", repostOnRepublish);
 
 	return {
 		...(await buildSettingsPage(ctx)),

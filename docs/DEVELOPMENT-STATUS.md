@@ -1,6 +1,6 @@
 # Emdash to Buffer Plugin Status
 
-## Current Release: `emdash-to-buffer-plugin@1.1.0-beta.1`
+## Current Release: `emdash-to-buffer-plugin@1.1.1-beta.1`
 
 MVP: Emdash CMS plugin that sends published `posts` entries to Buffer, queues them on discovered/enabled channels, and prefers the content canonical URL with `/posts/{slug}` as fallback. Posts include title, excerpt, URL, and featured/OG image when available. Supported channels include LinkedIn, Facebook, and Google Business.
 
@@ -8,6 +8,7 @@ MVP: Emdash CMS plugin that sends published `posts` entries to Buffer, queues th
 
 ## Revision History
 
+- 1.1.1-beta.1: First-publish-only default. Skip Buffer sends when EmDash re-fires `content:afterPublish` for already-live posts (observation watermark + delivery claim); optional `repostOnRepublish` settings toggle.
 - 1.1.0-beta.1: Prerelease of the 1.1.0 install-shape / EmDash 0.30+ / publish-hook contract update.
 - 1.1.0: Breaking install-shape update (default export, drop `/native`), EmDash 0.30+ peer, publish-hook contract fix (`content:afterPublish` primary + delivery claim; no republish-after-unpublish by default), packaging via `emdash-plugin` CLI + `emdash-plugin.jsonc`.
 - 1.0.1: Patch release aligning plugin descriptor/native versions with package.json and tightening admin interaction typing (unreleased / superseded by 1.1.0).
@@ -30,6 +31,8 @@ Working:
 
 - Successfully sends posts to linked Buffer channels on first publish.
 - Delivery claim (`state:delivered:{postId}`) prevents double-queue and republish-after-unpublish.
+- Observation watermark (`state:watchSince`) keeps republishes of posts that were already live at install time from sending. EmDash re-fires `content:afterPublish` on every republish and the event carries no previous publish state, so posts that predate the watermark are claimed and skipped instead of queued.
+- `settings:repostOnRepublish` (default off) opts into a new Buffer update per republish, deduped per revision via the claim's `updatedAt`.
 - Delivery logs capture success/failure with channel, code, and message.
 - Settings page shows discovered channels with on/off toggles.
 - Channel discovery is automatic once the Buffer token is saved.
@@ -45,7 +48,6 @@ Working:
 Current Issues:
 
 - No known blocking issues in the current implementation.
-- Follow-up: optional `repostOnRepublish` settings toggle.
 - Follow-up: `ctx.url()` / `trailingSlash` alignment.
 - Marketplace publish needs a real Atmosphere `publisher` DID in `emdash-plugin.jsonc` (placeholder `did:plc:abc123def456` is for local validate/build only).
 
@@ -54,6 +56,7 @@ Current Issues:
 Debugging:
 
 - Publish attempts log `hook`, `collection`, `contentId`, `contentStatus`, and `isNew`.
+- Skipped sends log `emdash-to-buffer skipped send; not a first publish` with a `reason` (`already delivered`, `already delivered for this revision`, or `published before this install started tracking deliveries`).
 - Image extraction logs `contentKeys`, `dataKeys`, `seoKeys`, `pickedImageUrl`, and the resolved post URL.
 - Delivery log retention is capped at 200 rows.
 

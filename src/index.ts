@@ -6,7 +6,7 @@ import type { PluginDescriptor } from "emdash";
  */
 const emdashToBuffer: PluginDescriptor = {
 	id: "emdash-to-buffer",
-	version: "1.1.0-beta.1",
+	version: "1.1.1-beta.1",
 	format: "standard",
 	entrypoint: "emdash-to-buffer-plugin/sandbox",
 	options: {},
