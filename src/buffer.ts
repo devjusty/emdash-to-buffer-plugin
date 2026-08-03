@@ -49,9 +49,13 @@ export function isRetryableBufferStatus(status: number): boolean {
 	return status === 429 || status >= 500;
 }
 
-function isRetryableGraphQLError(errors: BufferGraphQLError[] | undefined): boolean {
+function isRetryableGraphQLError(
+	errors: BufferGraphQLError[] | undefined,
+): boolean {
 	if (!errors || errors.length === 0) return false;
-	return errors.some((error) => error.extensions?.code === "RATE_LIMIT_EXCEEDED");
+	return errors.some(
+		(error) => error.extensions?.code === "RATE_LIMIT_EXCEEDED",
+	);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -92,7 +96,13 @@ function normalizeMediaUrl(mediaUrl: string | undefined): string | undefined {
 		const url = new URL(mediaUrl);
 		if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
 		const hostname = url.hostname.toLowerCase();
-		if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]") {
+		if (
+			hostname === "localhost" ||
+			hostname.endsWith(".localhost") ||
+			hostname === "127.0.0.1" ||
+			hostname === "::1" ||
+			hostname === "[::1]"
+		) {
 			return undefined;
 		}
 		return url.toString();
@@ -106,7 +116,10 @@ async function fetchGraphQL<T>(args: {
 	accessToken: string;
 	query: string;
 	variables?: Record<string, unknown>;
-}): Promise<{ ok: true; data: T } | { ok: false; status?: number; error: string; retryable: boolean }> {
+}): Promise<
+	| { ok: true; data: T }
+	| { ok: false; status?: number; error: string; retryable: boolean }
+> {
 	try {
 		const response = await args.fetcher(BUFFER_API_URL, {
 			method: "POST",
@@ -131,7 +144,9 @@ async function fetchGraphQL<T>(args: {
 
 		const body = (await response.json()) as GraphQLResponse<T>;
 		if (body.errors && body.errors.length > 0) {
-			const message = body.errors.map((error) => error.message ?? "Unknown GraphQL error").join("; ");
+			const message = body.errors
+				.map((error) => error.message ?? "Unknown GraphQL error")
+				.join("; ");
 			return {
 				ok: false,
 				status: response.status,
@@ -141,7 +156,12 @@ async function fetchGraphQL<T>(args: {
 		}
 
 		if (!body.data) {
-			return { ok: false, status: response.status, error: "Missing GraphQL data", retryable: false };
+			return {
+				ok: false,
+				status: response.status,
+				error: "Missing GraphQL data",
+				retryable: false,
+			};
 		}
 
 		return { ok: true, data: body.data };
@@ -168,7 +188,9 @@ export async function discoverChannels(args: {
 		}
 	`;
 
-	const organizationsResult = await fetchGraphQL<{ account?: { organizations?: Organization[] } }>({
+	const organizationsResult = await fetchGraphQL<{
+		account?: { organizations?: Organization[] };
+	}>({
 		fetcher: args.fetcher,
 		accessToken: args.accessToken,
 		query: orgQuery,
@@ -177,7 +199,9 @@ export async function discoverChannels(args: {
 	if (!organizationsResult.ok) {
 		throw new Error(
 			`Buffer organizations query failed${
-				typeof organizationsResult.status === "number" ? ` (${organizationsResult.status})` : ""
+				typeof organizationsResult.status === "number"
+					? ` (${organizationsResult.status})`
+					: ""
 			}: ${organizationsResult.error}`,
 		);
 	}
@@ -211,7 +235,9 @@ export async function discoverChannels(args: {
 		if (!channelsResult.ok) {
 			channelErrors.push(
 				`org ${organization.id}${
-					typeof channelsResult.status === "number" ? ` (${channelsResult.status})` : ""
+					typeof channelsResult.status === "number"
+						? ` (${channelsResult.status})`
+						: ""
 				}: ${channelsResult.error}`,
 			);
 			continue;
@@ -242,7 +268,9 @@ export async function discoverChannelIds(args: {
 	return channels.map((channel) => channel.id);
 }
 
-export async function sendBufferUpdate(args: SendBufferUpdateArgs): Promise<BufferSendResult> {
+export async function sendBufferUpdate(
+	args: SendBufferUpdateArgs,
+): Promise<BufferSendResult> {
 	const maxAttempts = args.maxAttempts ?? 3;
 	const baseDelayMs = args.baseDelayMs ?? 500;
 	const mediaUrl = normalizeMediaUrl(args.mediaUrl);

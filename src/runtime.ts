@@ -1,7 +1,11 @@
 import type { PluginContext } from "emdash";
 import type { SandboxedPlugin } from "emdash/plugin";
 
-import { discoverChannels, sendBufferUpdate, type BufferChannel } from "./buffer.js";
+import {
+	type BufferChannel,
+	discoverChannels,
+	sendBufferUpdate,
+} from "./buffer.js";
 import { inspectBufferImageUrl } from "./images.js";
 import { renderMessageTemplate } from "./render.js";
 import type { DeliveryLogRecord } from "./types.js";
@@ -23,7 +27,7 @@ interface PublishHookEvent {
 
 type PublishHookName = "content:afterSave" | "content:afterPublish";
 
-interface AdminInteraction {
+export interface AdminInteraction {
 	type?: string;
 	page?: string;
 	action_id?: string;
@@ -35,20 +39,29 @@ interface DiscoveryErrorState {
 	timestamp: string;
 }
 
-function getContentData(content: Record<string, unknown>): Record<string, unknown> {
+function getContentData(
+	content: Record<string, unknown>,
+): Record<string, unknown> {
 	const data = content.data;
 	if (data && typeof data === "object") return data as Record<string, unknown>;
 	return content;
 }
 
-function getContentSeo(content: Record<string, unknown>): Record<string, unknown> | null {
-	if (content.seo && typeof content.seo === "object") return content.seo as Record<string, unknown>;
+function getContentSeo(
+	content: Record<string, unknown>,
+): Record<string, unknown> | null {
+	if (content.seo && typeof content.seo === "object")
+		return content.seo as Record<string, unknown>;
 	const data = getContentData(content);
-	if (data.seo && typeof data.seo === "object") return data.seo as Record<string, unknown>;
+	if (data.seo && typeof data.seo === "object")
+		return data.seo as Record<string, unknown>;
 	return null;
 }
 
-async function pruneDeliveryLogs(ctx: PluginContext, maxItems: number): Promise<void> {
+async function pruneDeliveryLogs(
+	ctx: PluginContext,
+	maxItems: number,
+): Promise<void> {
 	const deliveryLogs = ctx.storage?.delivery_logs;
 	if (!deliveryLogs) return;
 
@@ -70,7 +83,10 @@ async function pruneDeliveryLogs(ctx: PluginContext, maxItems: number): Promise<
 		pageIds.push(ids);
 		totalCount += ids.length;
 
-		const nextCursor = typeof result?.cursor === "string" && result.cursor.length > 0 ? result.cursor : undefined;
+		const nextCursor =
+			typeof result?.cursor === "string" && result.cursor.length > 0
+				? result.cursor
+				: undefined;
 		const hasMore = result?.hasMore === true || !!nextCursor;
 		if (!hasMore) break;
 		if (!nextCursor) break;
@@ -90,7 +106,10 @@ async function pruneDeliveryLogs(ctx: PluginContext, maxItems: number): Promise<
 	}
 }
 
-async function appendDeliveryLog(ctx: PluginContext, record: DeliveryLogRecord): Promise<void> {
+async function appendDeliveryLog(
+	ctx: PluginContext,
+	record: DeliveryLogRecord,
+): Promise<void> {
 	try {
 		const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 		await ctx.storage?.delivery_logs?.put(id, record);
@@ -133,12 +152,18 @@ function normalizePostSlug(rawSlug: unknown): string {
 	return slug.replace(/^\/+/, "");
 }
 
-function resolvePublishedUrl(content: Record<string, unknown>, siteUrl: string | null): string {
+function resolvePublishedUrl(
+	content: Record<string, unknown>,
+	siteUrl: string | null,
+): string {
 	const seo = getContentSeo(content);
-	const canonical = seo && typeof seo.canonical === "string" ? seo.canonical.trim() : "";
+	const canonical =
+		seo && typeof seo.canonical === "string" ? seo.canonical.trim() : "";
 	if (canonical.length > 0) {
 		if (/^https?:\/\//iu.test(canonical)) return canonical;
-		const canonicalPath = canonical.startsWith("/") ? canonical : `/${canonical}`;
+		const canonicalPath = canonical.startsWith("/")
+			? canonical
+			: `/${canonical}`;
 		return resolveAbsoluteUrl(canonicalPath, siteUrl);
 	}
 
@@ -170,11 +195,14 @@ function normalizeEnabledChannelIds(value: unknown): string[] | null {
 }
 
 function getChannelLabel(channel: BufferChannel): string {
-	if (channel.username) return `${channel.name} (${channel.service}: ${channel.username})`;
+	if (channel.username)
+		return `${channel.name} (${channel.service}: ${channel.username})`;
 	return `${channel.name} (${channel.service})`;
 }
 
-async function loadDiscoveredChannels(ctx: PluginContext): Promise<BufferChannel[]> {
+async function loadDiscoveredChannels(
+	ctx: PluginContext,
+): Promise<BufferChannel[]> {
 	const value = await ctx.kv.get<unknown>("state:discoveredChannels");
 	if (!Array.isArray(value)) return [];
 
@@ -200,7 +228,9 @@ async function loadDiscoveredChannels(ctx: PluginContext): Promise<BufferChannel
 	return channels;
 }
 
-async function loadRecentDeliveryLogs(ctx: PluginContext): Promise<DeliveryLogRecord[]> {
+async function loadRecentDeliveryLogs(
+	ctx: PluginContext,
+): Promise<DeliveryLogRecord[]> {
 	try {
 		const deliveryLogs = ctx.storage?.delivery_logs;
 		if (!deliveryLogs) return [];
@@ -230,7 +260,10 @@ async function loadRecentDeliveryLogs(ctx: PluginContext): Promise<DeliveryLogRe
 				postId: row.postId,
 				postSlug: row.postSlug,
 				channelId: row.channelId,
-				channelService: typeof row.channelService === "string" ? row.channelService : undefined,
+				channelService:
+					typeof row.channelService === "string"
+						? row.channelService
+						: undefined,
 				code: typeof row.code === "string" ? row.code : undefined,
 				message: row.message,
 			});
@@ -268,7 +301,10 @@ async function clearAllDeliveryLogs(ctx: PluginContext): Promise<number> {
 			allIds.push(...ids);
 		}
 
-		const nextCursor = typeof result?.cursor === "string" && result.cursor.length > 0 ? result.cursor : undefined;
+		const nextCursor =
+			typeof result?.cursor === "string" && result.cursor.length > 0
+				? result.cursor
+				: undefined;
 		const hasMore = result?.hasMore === true || !!nextCursor;
 		if (!hasMore) break;
 		if (!nextCursor) break;
@@ -290,10 +326,16 @@ function parseDiscoveryError(value: unknown): DiscoveryErrorState | null {
 	return { message: row.message, timestamp: row.timestamp };
 }
 
-async function discoverAndPersistChannels(ctx: PluginContext, accessToken: string): Promise<BufferChannel[]> {
+async function discoverAndPersistChannels(
+	ctx: PluginContext,
+	accessToken: string,
+): Promise<BufferChannel[]> {
 	if (!ctx.http) return [];
 	try {
-		const channels = await discoverChannels({ fetcher: ctx.http.fetch, accessToken });
+		const channels = await discoverChannels({
+			fetcher: ctx.http.fetch,
+			accessToken,
+		});
 		await ctx.kv.set("state:discoveredChannels", channels);
 		await ctx.kv.set("state:discoveredAt", new Date().toISOString());
 		await ctx.kv.set("state:lastDiscoveryError", null);
@@ -309,8 +351,13 @@ async function discoverAndPersistChannels(ctx: PluginContext, accessToken: strin
 	}
 }
 
-async function getChannelsForPublishing(ctx: PluginContext, accessToken: string): Promise<BufferChannel[]> {
-	const explicit = normalizeEnabledChannelIds(await ctx.kv.get<unknown>("settings:enabledChannelIds"));
+async function getChannelsForPublishing(
+	ctx: PluginContext,
+	accessToken: string,
+): Promise<BufferChannel[]> {
+	const explicit = normalizeEnabledChannelIds(
+		await ctx.kv.get<unknown>("settings:enabledChannelIds"),
+	);
 	const cached = await loadDiscoveredChannels(ctx);
 	if (explicit) {
 		if (explicit.length === 0) return [];
@@ -329,21 +376,39 @@ async function getChannelsForPublishing(ctx: PluginContext, accessToken: string)
 	return discovered;
 }
 
-export async function handleAfterSave(event: PublishEvent, ctx: PluginContext): Promise<void> {
+export async function handleAfterSave(
+	event: PublishEvent,
+	ctx: PluginContext,
+): Promise<void> {
 	if (event.collection !== "posts") return;
 	if (!isFirstPublish(event)) return;
-	await handlePublishedContent(event.collection, event.content, ctx, "content:afterSave", {
-		hasBefore: !!event.before,
-		isNew: event.isNew === true,
-	});
+	await handlePublishedContent(
+		event.collection,
+		event.content,
+		ctx,
+		"content:afterSave",
+		{
+			hasBefore: !!event.before,
+			isNew: event.isNew === true,
+		},
+	);
 }
 
-	export async function handleAfterPublish(event: PublishHookEvent, ctx: PluginContext): Promise<void> {
+export async function handleAfterPublish(
+	event: PublishHookEvent,
+	ctx: PluginContext,
+): Promise<void> {
 	if (event.collection !== "posts") return;
-	await handlePublishedContent(event.collection, event.content, ctx, "content:afterPublish", {
-		hasBefore: false,
-		isNew: false,
-	});
+	await handlePublishedContent(
+		event.collection,
+		event.content,
+		ctx,
+		"content:afterPublish",
+		{
+			hasBefore: false,
+			isNew: false,
+		},
+	);
 }
 
 async function handlePublishedContent(
@@ -397,7 +462,9 @@ async function handlePublishedContent(
 
 	const channels = await getChannelsForPublishing(ctx, accessToken);
 	if (channels.length === 0) {
-		ctx.log.warn("emdash-to-buffer skipped send because no Buffer channels are enabled");
+		ctx.log.warn(
+			"emdash-to-buffer skipped send because no Buffer channels are enabled",
+		);
 		await appendDeliveryLog(ctx, {
 			createdAt: new Date().toISOString(),
 			status: "failed",
@@ -410,8 +477,10 @@ async function handlePublishedContent(
 	}
 
 	const messageTemplate =
-		(await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title}\n{excerpt}\n{url}";
-	const siteUrl = ctx.site.url || (await ctx.kv.get<string>("settings:siteUrl")) || null;
+		(await ctx.kv.get<string>("settings:messageTemplate")) ??
+		"{title}\n{excerpt}\n{url}";
+	const siteUrl =
+		ctx.site.url || (await ctx.kv.get<string>("settings:siteUrl")) || null;
 	const url = resolvePublishedUrl(content, siteUrl);
 	const contentData = getContentData(content);
 	const imageInspection = inspectBufferImageUrl(content, siteUrl);
@@ -428,7 +497,7 @@ async function handlePublishedContent(
 		pickedImageUrl: imageUrl ?? null,
 		pickedImageSource: imageInspection.source,
 		rawImageUrl: imageInspection.rawUrl,
-						postUrl: url,
+		postUrl: url,
 	};
 	ctx.log.info("emdash-to-buffer image extraction", imageDebug);
 	const text = renderMessageTemplate(messageTemplate, {
@@ -479,7 +548,8 @@ async function handlePublishedContent(
 				postSlug,
 				channelId,
 				channelService: channel.service,
-				code: typeof result.status === "number" ? String(result.status) : undefined,
+				code:
+					typeof result.status === "number" ? String(result.status) : undefined,
 				message: result.error ?? "Unknown error",
 			});
 			continue;
@@ -499,16 +569,21 @@ async function handlePublishedContent(
 			postSlug,
 			channelId,
 			channelService: channel.service,
-			code: typeof result.status === "number" ? String(result.status) : undefined,
+			code:
+				typeof result.status === "number" ? String(result.status) : undefined,
 			message: "Queued in Buffer",
 		});
 	}
 }
 
-async function buildSettingsPage(ctx: PluginContext, options?: { refresh?: boolean }) {
+async function buildSettingsPage(
+	ctx: PluginContext,
+	options?: { refresh?: boolean },
+) {
 	const accessToken = await ctx.kv.get<string>("settings:accessToken");
 	const messageTemplate =
-		(await ctx.kv.get<string>("settings:messageTemplate")) ?? "{title}\n{excerpt}\n{url}";
+		(await ctx.kv.get<string>("settings:messageTemplate")) ??
+		"{title}\n{excerpt}\n{url}";
 	const enabled = (await ctx.kv.get<boolean>("settings:enabled")) ?? true;
 	const savedEnabledChannelIds = normalizeEnabledChannelIds(
 		await ctx.kv.get<unknown>("settings:enabledChannelIds"),
@@ -527,7 +602,9 @@ async function buildSettingsPage(ctx: PluginContext, options?: { refresh?: boole
 	const selectedSet = new Set<string>(selectedChannelIds);
 
 	const lastDiscoveredAt = await ctx.kv.get<string>("state:discoveredAt");
-	const discoveryError = parseDiscoveryError(await ctx.kv.get<unknown>("state:lastDiscoveryError"));
+	const discoveryError = parseDiscoveryError(
+		await ctx.kv.get<unknown>("state:lastDiscoveryError"),
+	);
 	const deliveryLogs = await loadRecentDeliveryLogs(ctx);
 
 	return {
@@ -552,11 +629,17 @@ async function buildSettingsPage(ctx: PluginContext, options?: { refresh?: boole
 			{
 				type: "fields",
 				fields: [
-					{ label: "Access token", value: accessToken ? "Configured" : "Not configured" },
+					{
+						label: "Access token",
+						value: accessToken ? "Configured" : "Not configured",
+					},
 					{ label: "Discovered channels", value: String(channels.length) },
 					{
 						label: "Last discovery",
-						value: lastDiscoveredAt && lastDiscoveredAt.length > 0 ? lastDiscoveredAt : "Never",
+						value:
+							lastDiscoveredAt && lastDiscoveredAt.length > 0
+								? lastDiscoveredAt
+								: "Never",
 					},
 					{
 						label: "Last discovery error",
@@ -676,11 +759,18 @@ async function buildSettingsPage(ctx: PluginContext, options?: { refresh?: boole
 	};
 }
 
-async function saveSettings(ctx: PluginContext, values: Record<string, unknown>) {
-	const accessToken = typeof values.accessToken === "string" ? values.accessToken.trim() : "";
-	const enabledChannelIds = normalizeEnabledChannelIds(values.enabledChannelIds) ?? [];
+async function saveSettings(
+	ctx: PluginContext,
+	values: Record<string, unknown>,
+) {
+	const accessToken =
+		typeof values.accessToken === "string" ? values.accessToken.trim() : "";
+	const enabledChannelIds =
+		normalizeEnabledChannelIds(values.enabledChannelIds) ?? [];
 	const messageTemplate =
-		typeof values.messageTemplate === "string" ? values.messageTemplate : "{title}\n{excerpt}\n{url}";
+		typeof values.messageTemplate === "string"
+			? values.messageTemplate
+			: "{title}\n{excerpt}\n{url}";
 	const enabled = typeof values.enabled === "boolean" ? values.enabled : true;
 
 	if (accessToken.length > 0) {
@@ -697,12 +787,18 @@ async function saveSettings(ctx: PluginContext, values: Record<string, unknown>)
 	};
 }
 
-export async function handleAdminInteraction(interaction: AdminInteraction | null, ctx: PluginContext) {
+export async function handleAdminInteraction(
+	interaction: AdminInteraction | null,
+	ctx: PluginContext,
+) {
 	if (interaction?.type === "page_load" && interaction.page === "/settings") {
 		return buildSettingsPage(ctx);
 	}
 
-	if (interaction?.type === "block_action" && interaction.action_id === "discover_channels") {
+	if (
+		interaction?.type === "block_action" &&
+		interaction.action_id === "discover_channels"
+	) {
 		const accessToken = await ctx.kv.get<string>("settings:accessToken");
 		if (!accessToken || !ctx.http) {
 			return {
@@ -716,20 +812,25 @@ export async function handleAdminInteraction(interaction: AdminInteraction | nul
 
 		const channels = await discoverAndPersistChannels(ctx, accessToken);
 		const isError = channels.length === 0;
-		const discoveryError = parseDiscoveryError(await ctx.kv.get<unknown>("state:lastDiscoveryError"));
+		const discoveryError = parseDiscoveryError(
+			await ctx.kv.get<unknown>("state:lastDiscoveryError"),
+		);
 		return {
 			...(await buildSettingsPage(ctx)),
 			toast: {
 				type: isError ? "error" : "success",
 				message: isError
 					? (discoveryError?.message ??
-							"No Buffer channels found. Verify token permissions and connected channels in Buffer.")
+						"No Buffer channels found. Verify token permissions and connected channels in Buffer.")
 					: `Discovered ${channels.length} Buffer channel${channels.length === 1 ? "" : "s"}.`,
 			},
 		};
 	}
 
-	if (interaction?.type === "block_action" && interaction.action_id === "clear_delivery_logs") {
+	if (
+		interaction?.type === "block_action" &&
+		interaction.action_id === "clear_delivery_logs"
+	) {
 		const clearedCount = await clearAllDeliveryLogs(ctx);
 		return {
 			...(await buildSettingsPage(ctx)),
@@ -740,7 +841,10 @@ export async function handleAdminInteraction(interaction: AdminInteraction | nul
 		};
 	}
 
-	if (interaction?.type === "form_submit" && interaction.action_id === "save_settings") {
+	if (
+		interaction?.type === "form_submit" &&
+		interaction.action_id === "save_settings"
+	) {
 		return saveSettings(ctx, interaction.values ?? {});
 	}
 
