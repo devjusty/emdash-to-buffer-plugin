@@ -1,6 +1,6 @@
 # Emdash to Buffer Plugin Status
 
-## Current Release: `emdash-to-buffer-plugin@1.1.1-beta.1`
+## Current Release: `emdash-to-buffer-plugin@1.1.1`
 
 MVP: Emdash CMS plugin that sends published `posts` entries to Buffer, queues them on discovered/enabled channels, and prefers the content canonical URL with `/posts/{slug}` as fallback. Posts include title, excerpt, URL, and featured/OG image when available. Supported channels include LinkedIn, Facebook, and Google Business.
 
@@ -8,6 +8,8 @@ MVP: Emdash CMS plugin that sends published `posts` entries to Buffer, queues th
 
 ## Revision History
 
+- 1.1.1: Stable cut of first-publish-only Buffer delivery. Skip sends when EmDash re-fires `content:afterPublish` for already-live posts (`state:watchSince` watermark + delivery claim); optional `repostOnRepublish` settings toggle. Graduates `1.1.1-beta.1` / `1.1.1-beta.2`.
+- 1.1.1-beta.2: Prerelease validation of the first-publish-only gate on a live site.
 - 1.1.1-beta.1: First-publish-only default. Skip Buffer sends when EmDash re-fires `content:afterPublish` for already-live posts (observation watermark + delivery claim); optional `repostOnRepublish` settings toggle.
 - 1.1.0-beta.1: Prerelease of the 1.1.0 install-shape / EmDash 0.30+ / publish-hook contract update.
 - 1.1.0: Breaking install-shape update (default export, drop `/native`), EmDash 0.30+ peer, publish-hook contract fix (`content:afterPublish` primary + delivery claim; no republish-after-unpublish by default), packaging via `emdash-plugin` CLI + `emdash-plugin.jsonc`.
