@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
 
-import { pluginDefinition } from "../src/runtime.js";
-import pluginDefault from "../src/plugin.js";
 import emdashToBuffer from "../src/index.js";
+import pluginDefault from "../src/plugin.js";
+import { pluginDefinition } from "../src/runtime.js";
 
 const packageJsonPath = fileURLToPath(new URL("../package.json", import.meta.url));
 const packageVersion = (JSON.parse(readFileSync(packageJsonPath, "utf8")) as { version: string })

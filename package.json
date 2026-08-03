@@ -28,6 +28,7 @@
     "emdash": ">=0.30.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.6",
     "@emdash-cms/plugin-cli": "0.8.0",
     "@types/node": "^24.10.0",
     "emdash": "^0.31.1",
@@ -37,8 +38,12 @@
   },
   "scripts": {
     "build": "emdash-plugin build",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
     "dev": "emdash-plugin dev",
+    "format": "biome format --write .",
     "knip": "knip",
+    "lint": "biome lint .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "validate": "emdash-plugin validate"
