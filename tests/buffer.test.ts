@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { discoverChannelIds, discoverChannels, isRetryableBufferStatus } from "../src/buffer.js";
+import {
+	discoverChannelIds,
+	discoverChannels,
+	isRetryableBufferStatus,
+} from "../src/buffer.js";
 
 describe("isRetryableBufferStatus", () => {
 	it("retries for 429 and 5xx", () => {
@@ -19,7 +23,10 @@ describe("isRetryableBufferStatus", () => {
 describe("discoverChannelIds", () => {
 	it("discovers channels from organizations", async () => {
 		const fetchMock = async (_input: string, init?: RequestInit) => {
-			const body = JSON.parse(String(init?.body)) as { query?: string; variables?: Record<string, string> };
+			const body = JSON.parse(String(init?.body)) as {
+				query?: string;
+				variables?: Record<string, string>;
+			};
 
 			if (body.query?.includes("GetOrganizations")) {
 				return new Response(
@@ -34,12 +41,20 @@ describe("discoverChannelIds", () => {
 				);
 			}
 
-			if (body.query?.includes("GetChannels") && body.variables?.organizationId === "org-1") {
+			if (
+				body.query?.includes("GetChannels") &&
+				body.variables?.organizationId === "org-1"
+			) {
 				return new Response(
 					JSON.stringify({
 						data: {
 							channels: [
-								{ id: "chan-1", name: "Main X", service: "twitter", displayName: "main" },
+								{
+									id: "chan-1",
+									name: "Main X",
+									service: "twitter",
+									displayName: "main",
+								},
 								{ id: "chan-2", name: "LinkedIn", service: "linkedin" },
 							],
 						},
@@ -63,7 +78,10 @@ describe("discoverChannelIds", () => {
 describe("discoverChannels", () => {
 	it("returns channel metadata for settings UI", async () => {
 		const fetchMock = async (_input: string, init?: RequestInit) => {
-			const body = JSON.parse(String(init?.body)) as { query?: string; variables?: Record<string, string> };
+			const body = JSON.parse(String(init?.body)) as {
+				query?: string;
+				variables?: Record<string, string>;
+			};
 
 			if (body.query?.includes("GetOrganizations")) {
 				return new Response(
@@ -82,7 +100,12 @@ describe("discoverChannels", () => {
 				JSON.stringify({
 					data: {
 						channels: [
-							{ id: "chan-1", name: "Main X", service: "twitter", displayName: "main" },
+							{
+								id: "chan-1",
+								name: "Main X",
+								service: "twitter",
+								displayName: "main",
+							},
 						],
 					},
 				}),
@@ -90,7 +113,10 @@ describe("discoverChannels", () => {
 			);
 		};
 
-		const channels = await discoverChannels({ fetcher: fetchMock, accessToken: "token" });
+		const channels = await discoverChannels({
+			fetcher: fetchMock,
+			accessToken: "token",
+		});
 		expect(channels).toEqual([
 			{ id: "chan-1", name: "Main X", service: "twitter", username: "main" },
 		]);
@@ -119,8 +145,8 @@ describe("discoverChannels", () => {
 			);
 		};
 
-		await expect(discoverChannels({ fetcher: fetchMock, accessToken: "token" })).rejects.toThrow(
-			"Buffer channels query failed",
-		);
+		await expect(
+			discoverChannels({ fetcher: fetchMock, accessToken: "token" }),
+		).rejects.toThrow("Buffer channels query failed");
 	});
 });

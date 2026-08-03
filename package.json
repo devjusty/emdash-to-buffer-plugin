@@ -1,62 +1,62 @@
 {
-  "name": "emdash-to-buffer-plugin",
-  "version": "1.1.0-beta.1",
-  "description": "Send newly published EmDash posts to Buffer queue",
-  "type": "module",
-  "main": "dist/index.mjs",
-  "exports": {
-    ".": {
-      "import": "./dist/index.mjs",
-      "types": "./dist/index.d.mts"
-    },
-    "./sandbox": "./dist/plugin.mjs"
-  },
-  "files": [
-    "dist",
-    "emdash-plugin.jsonc"
-  ],
-  "keywords": [
-    "emdash",
-    "cms",
-    "plugin",
-    "buffer",
-    "syndication"
-  ],
-  "author": "Justin Thompson",
-  "license": "MIT",
-  "peerDependencies": {
-    "emdash": ">=0.30.0"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.5.6",
-    "@emdash-cms/plugin-cli": "0.8.0",
-    "@types/node": "^24.10.0",
-    "emdash": "^0.31.1",
-    "knip": "^6.6.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.18"
-  },
-  "scripts": {
-    "build": "emdash-plugin build",
-    "check": "biome check .",
-    "check:fix": "biome check --write .",
-    "dev": "emdash-plugin dev",
-    "format": "biome format --write .",
-    "knip": "knip",
-    "lint": "biome lint .",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "validate": "emdash-plugin validate"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/devjusty/emdash-to-buffer-plugin.git"
-  },
-  "knip": {
-    "entry": [
-      "src/index.ts",
-      "src/plugin.ts"
-    ]
-  },
-  "packageManager": "pnpm@11.20.0+sha512.9a6f330a95b66446ea088faf1521405a8a01f07fde7124cc9958dfed52d4bb436737e65b08f85f37b46fcba375092558ac51262b816844b22f63406ed166bfee"
+	"name": "emdash-to-buffer-plugin",
+	"version": "1.1.0-beta.1",
+	"description": "Send newly published EmDash posts to Buffer queue",
+	"type": "module",
+	"main": "dist/index.mjs",
+	"exports": {
+		".": {
+			"import": "./dist/index.mjs",
+			"types": "./dist/index.d.mts"
+		},
+		"./sandbox": "./dist/plugin.mjs"
+	},
+	"files": [
+		"dist",
+		"emdash-plugin.jsonc"
+	],
+	"keywords": [
+		"emdash",
+		"cms",
+		"plugin",
+		"buffer",
+		"syndication"
+	],
+	"author": "Justin Thompson",
+	"license": "MIT",
+	"peerDependencies": {
+		"emdash": ">=0.30.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.6",
+		"@emdash-cms/plugin-cli": "0.8.0",
+		"@types/node": "^24.10.0",
+		"emdash": "^0.31.1",
+		"knip": "^6.6.0",
+		"typescript": "^5.9.3",
+		"vitest": "^4.0.18"
+	},
+	"scripts": {
+		"build": "emdash-plugin build",
+		"check": "biome check .",
+		"check:fix": "biome check --write .",
+		"dev": "emdash-plugin dev",
+		"format": "biome format --write .",
+		"knip": "knip",
+		"lint": "biome lint .",
+		"test": "vitest run",
+		"typecheck": "tsc --noEmit",
+		"validate": "emdash-plugin validate"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/devjusty/emdash-to-buffer-plugin.git"
+	},
+	"knip": {
+		"entry": [
+			"src/index.ts",
+			"src/plugin.ts"
+		]
+	},
+	"packageManager": "pnpm@11.20.0+sha512.9a6f330a95b66446ea088faf1521405a8a01f07fde7124cc9958dfed52d4bb436737e65b08f85f37b46fcba375092558ac51262b816844b22f63406ed166bfee"
 }

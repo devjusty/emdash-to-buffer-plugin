@@ -28,8 +28,9 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: pnpm
           registry-url: https://registry.npmjs.org
+          # Prefer a clean install for release builds (npm trusted-publishing guidance).
+          package-manager-cache: false
 
       - name: Validate release tag format
         run: |
@@ -42,18 +43,94 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Validate tag matches package version
+      - name: Validate versions agree
         run: |
           TAG="${{ github.event.release.tag_name }}"
           TAG_VERSION="${TAG#v}"
           PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          DESCRIPTOR_VERSION="$(node -e "
+            const source = require('node:fs').readFileSync('src/index.ts', 'utf8');
+            const match = source.match(/version:\\s*[\"']([^\"']+)[\"']/);
+            if (!match) {
+              console.error('Could not parse version from src/index.ts');
+              process.exit(1);
+            }
+            process.stdout.write(match[1]);
+          ")"
+
           if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
             echo "Release tag version ($TAG_VERSION) does not match package.json version ($PACKAGE_VERSION)"
             exit 1
           fi
 
+          if [ "$DESCRIPTOR_VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "src/index.ts version ($DESCRIPTOR_VERSION) does not match package.json version ($PACKAGE_VERSION)"
+            exit 1
+          fi
+
+          case "$PACKAGE_VERSION" in
+            *-*) IS_PRERELEASE_VERSION=true ;;
+            *) IS_PRERELEASE_VERSION=false ;;
+          esac
+
+          if [ "$IS_PRERELEASE_VERSION" = "true" ] && [ "${{ github.event.release.prerelease }}" != "true" ]; then
+            echo "Version $PACKAGE_VERSION is a prerelease, but the GitHub release is not marked as prerelease"
+            exit 1
+          fi
+
+          if [ "$IS_PRERELEASE_VERSION" = "false" ] && [ "${{ github.event.release.prerelease }}" = "true" ]; then
+            echo "GitHub release is marked prerelease, but version $PACKAGE_VERSION has no prerelease identifier"
+            exit 1
+          fi
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Validate plugin descriptor
+        run: pnpm validate
+
       - name: Build
         run: pnpm build
+
+      - name: Verify package contents
+        run: |
+          node <<'EOF'
+          const { execFileSync } = require("node:child_process");
+          const output = execFileSync("npm", ["pack", "--dry-run", "--json"], {
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "pipe"],
+          });
+          const packs = JSON.parse(output);
+          // npm <12 returned an array; npm 12+ (Node 24) returns a name-keyed object.
+          const pack = Array.isArray(packs)
+            ? packs[0]
+            : packs[Object.keys(packs)[0]];
+          const files = pack.files.map((file) => file.path).sort();
+          const expected = [
+            "LICENSE",
+            "README.md",
+            "dist/index.d.mts",
+            "dist/index.mjs",
+            "dist/manifest.json",
+            "dist/plugin.d.mts",
+            "dist/plugin.mjs",
+            "emdash-plugin.jsonc",
+            "package.json",
+          ].sort();
+
+          if (JSON.stringify(files) !== JSON.stringify(expected)) {
+            console.error("Unexpected npm pack contents.");
+            console.error("Expected:", expected);
+            console.error("Actual:", files);
+            process.exit(1);
+          }
+
+          console.log("npm pack contents match allowlist:");
+          for (const file of files) console.log(`- ${file}`);
+          EOF
 
       - name: Verify npm package does not already exist
         run: |
@@ -66,8 +143,12 @@ jobs:
 
       - name: Publish to npm
         run: |
-          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
-            npm publish --provenance --access public --tag beta
-          else
-            npm publish --provenance --access public
-          fi
+          VERSION="$(node -p "require('./package.json').version")"
+          case "$VERSION" in
+            *-*)
+              npm publish --provenance --access public --tag beta
+              ;;
+            *)
+              npm publish --provenance --access public
+              ;;
+          esac

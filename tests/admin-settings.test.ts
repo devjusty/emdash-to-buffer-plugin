@@ -5,21 +5,34 @@ import { pluginDefinition } from "../src/runtime.js";
 function createContext(initial: Array<[string, unknown]> = []) {
 	const kvData = new Map<string, unknown>(initial);
 	const fetchMock = vi.fn(async (_input: string, init?: RequestInit) => {
-		const body = JSON.parse(String(init?.body)) as { query?: string; variables?: Record<string, string> };
+		const body = JSON.parse(String(init?.body)) as {
+			query?: string;
+			variables?: Record<string, string>;
+		};
 
 		if (body.query?.includes("GetOrganizations")) {
 			return new Response(
-				JSON.stringify({ data: { account: { organizations: [{ id: "org-1" }] } } }),
+				JSON.stringify({
+					data: { account: { organizations: [{ id: "org-1" }] } },
+				}),
 				{ status: 200 },
 			);
 		}
 
-		if (body.query?.includes("GetChannels") && body.variables?.organizationId === "org-1") {
+		if (
+			body.query?.includes("GetChannels") &&
+			body.variables?.organizationId === "org-1"
+		) {
 			return new Response(
 				JSON.stringify({
 					data: {
 						channels: [
-							{ id: "chan-1", name: "Main X", service: "twitter", displayName: "main" },
+							{
+								id: "chan-1",
+								name: "Main X",
+								service: "twitter",
+								displayName: "main",
+							},
 							{ id: "chan-2", name: "LinkedIn", service: "linkedin" },
 						],
 					},
@@ -47,7 +60,7 @@ function createContext(initial: Array<[string, unknown]> = []) {
 	};
 }
 
-	describe("admin settings route", () => {
+describe("admin settings route", () => {
 	it("loads settings page with discovered channel table and toggles", async () => {
 		const { ctx } = createContext([
 			["settings:accessToken", "token"],
@@ -59,12 +72,18 @@ function createContext(initial: Array<[string, unknown]> = []) {
 			ctx,
 		);
 
-		const table = response.blocks.find((block: any) => block.type === "table") as any;
+		const table = response.blocks.find(
+			(block: any) => block.type === "table",
+		) as any;
 		expect(table.rows).toHaveLength(2);
 		expect(table.rows[0].id).toBe("chan-1");
 
-		const form = response.blocks.find((block: any) => block.type === "form") as any;
-		const enabledField = form.fields.find((field: any) => field.action_id === "enabledChannelIds") as any;
+		const form = response.blocks.find(
+			(block: any) => block.type === "form",
+		) as any;
+		const enabledField = form.fields.find(
+			(field: any) => field.action_id === "enabledChannelIds",
+		) as any;
 		expect(enabledField.initial_value).toEqual(["chan-1", "chan-2"]);
 	});
 
@@ -136,7 +155,9 @@ function createContext(initial: Array<[string, unknown]> = []) {
 			ctx,
 		);
 
-		const table = response.blocks.find((block: any) => block.block_id === "delivery-log-table") as any;
+		const table = response.blocks.find(
+			(block: any) => block.block_id === "delivery-log-table",
+		) as any;
 		expect(table).toBeTruthy();
 		expect(table.rows).toHaveLength(2);
 		expect(table.rows[0].post).toBe("newer-post");
@@ -163,10 +184,10 @@ function createContext(initial: Array<[string, unknown]> = []) {
 			},
 		} as any;
 
-		const response = await pluginDefinition.routes.admin.handler(
+		const response = (await pluginDefinition.routes.admin.handler(
 			{ input: { type: "block_action", action_id: "clear_delivery_logs" } },
 			ctx,
-		) as any;
+		)) as any;
 
 		expect(deleteMany).toHaveBeenCalledWith(["log-1", "log-2"]);
 		expect(response.toast.type).toBe("success");
@@ -205,10 +226,10 @@ function createContext(initial: Array<[string, unknown]> = []) {
 			},
 		} as any;
 
-		const response = await pluginDefinition.routes.admin.handler(
+		const response = (await pluginDefinition.routes.admin.handler(
 			{ input: { type: "block_action", action_id: "clear_delivery_logs" } },
 			ctx,
-		) as any;
+		)) as any;
 
 		expect(query.mock.calls.length).toBeGreaterThanOrEqual(2);
 		expect(query).toHaveBeenNthCalledWith(
@@ -217,9 +238,18 @@ function createContext(initial: Array<[string, unknown]> = []) {
 		);
 		expect(query).toHaveBeenNthCalledWith(
 			2,
-			expect.objectContaining({ orderBy: { createdAt: "asc" }, limit: 500, cursor: "2" }),
+			expect.objectContaining({
+				orderBy: { createdAt: "asc" },
+				limit: 500,
+				cursor: "2",
+			}),
 		);
-		expect(deleteMany).toHaveBeenCalledWith(["log-1", "log-2", "log-3", "log-4"]);
+		expect(deleteMany).toHaveBeenCalledWith([
+			"log-1",
+			"log-2",
+			"log-3",
+			"log-4",
+		]);
 		expect(response.toast.type).toBe("success");
 		expect(response.toast.message).toContain("Cleared 4");
 	});

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { handleAfterPublish, handleAfterSave, pluginDefinition } from "../src/runtime.js";
+import {
+	handleAfterPublish,
+	handleAfterSave,
+	pluginDefinition,
+} from "../src/runtime.js";
 
 function createContext(
 	overrides?: Record<string, unknown>,
@@ -24,8 +28,18 @@ function createContext(
 		[
 			"state:discoveredChannels",
 			[
-				{ id: "p1", name: "LinkedIn", service: "linkedin", displayName: "linkedin" },
-				{ id: "p2", name: "LinkedIn 2", service: "linkedin", displayName: "linkedin" },
+				{
+					id: "p1",
+					name: "LinkedIn",
+					service: "linkedin",
+					displayName: "linkedin",
+				},
+				{
+					id: "p2",
+					name: "LinkedIn 2",
+					service: "linkedin",
+					displayName: "linkedin",
+				},
 			],
 		],
 	]);
@@ -40,16 +54,21 @@ function createContext(
 		fetchImpl ??
 			(async (_input: string, init?: RequestInit) => {
 				JSON.parse(String(init?.body));
-				return new Response(JSON.stringify({ data: { createPost: { post: { id: "p" } } } }), {
-					status: 200,
-				});
+				return new Response(
+					JSON.stringify({ data: { createPost: { post: { id: "p" } } } }),
+					{
+						status: 200,
+					},
+				);
 			}),
 	);
 	const putMock = vi.fn(storageOverrides?.put ?? (async () => {}));
 	const queryMock = vi.fn(
 		storageOverrides?.query ?? (async () => ({ items: [], hasMore: false })),
 	);
-	const deleteManyMock = vi.fn(storageOverrides?.deleteMany ?? (async () => {}));
+	const deleteManyMock = vi.fn(
+		storageOverrides?.deleteMany ?? (async () => {}),
+	);
 
 	return {
 		ctx: {
@@ -121,11 +140,19 @@ describe("content:afterPublish hook", () => {
 			"emdash-to-buffer image extraction",
 			expect.objectContaining({
 				pickedImageUrl: null,
-				contentKeys: expect.arrayContaining(["id", "slug", "data", "status", "published_at"]),
+				contentKeys: expect.arrayContaining([
+					"id",
+					"slug",
+					"data",
+					"status",
+					"published_at",
+				]),
 				dataKeys: expect.arrayContaining(["title", "excerpt"]),
 			}),
 		);
-		const firstRequestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+		const firstRequestBody = JSON.parse(
+			String(fetchMock.mock.calls[0]?.[1]?.body),
+		) as {
 			variables?: { input?: { text?: string } };
 		};
 		expect(firstRequestBody.variables?.input?.text).toContain("Hello World");
@@ -139,7 +166,10 @@ describe("content:afterPublish hook", () => {
 
 	it("skips when post was already delivered (no republish after unpublish)", async () => {
 		const { ctx, fetchMock } = createContext({
-			"state:delivered:post-1": { at: "2026-04-20T00:00:00.000Z", hook: "content:afterPublish" },
+			"state:delivered:post-1": {
+				at: "2026-04-20T00:00:00.000Z",
+				hook: "content:afterPublish",
+			},
 		});
 
 		await handleAfterPublish(
@@ -176,7 +206,9 @@ describe("content:afterPublish hook", () => {
 	});
 
 	it("skips publishing when explicit enabled channels list is empty", async () => {
-		const { ctx, fetchMock, putMock } = createContext({ "settings:enabledChannelIds": [] });
+		const { ctx, fetchMock, putMock } = createContext({
+			"settings:enabledChannelIds": [],
+		});
 
 		await handleAfterPublish(
 			{ collection: "posts", content: publishedPost },
@@ -211,7 +243,9 @@ describe("content:afterPublish hook", () => {
 			ctx,
 		);
 
-		const firstRequestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+		const firstRequestBody = JSON.parse(
+			String(fetchMock.mock.calls[0]?.[1]?.body),
+		) as {
 			variables?: { input?: { text?: string } };
 		};
 		expect(firstRequestBody.variables?.input?.text).toContain(
@@ -236,7 +270,9 @@ describe("content:afterPublish hook", () => {
 			ctx,
 		);
 
-		const firstRequestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+		const firstRequestBody = JSON.parse(
+			String(fetchMock.mock.calls[0]?.[1]?.body),
+		) as {
 			variables?: { input?: { text?: string } };
 		};
 		expect(firstRequestBody.variables?.input?.text).toContain(
@@ -262,7 +298,9 @@ describe("content:afterPublish hook", () => {
 			ctx,
 		);
 
-		const firstRequestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+		const firstRequestBody = JSON.parse(
+			String(fetchMock.mock.calls[0]?.[1]?.body),
+		) as {
 			variables?: { input?: { assets?: { images?: Array<{ url?: string }> } } };
 		};
 		expect(firstRequestBody.variables?.input?.assets).toBeUndefined();
@@ -285,9 +323,16 @@ describe("content:afterPublish hook", () => {
 			ctx,
 		);
 
-		const firstRequestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+		const firstRequestBody = JSON.parse(
+			String(fetchMock.mock.calls[0]?.[1]?.body),
+		) as {
 			variables?: {
-				input?: { assets?: { image?: { url?: string }; images?: Array<{ url?: string }> } };
+				input?: {
+					assets?: {
+						image?: { url?: string };
+						images?: Array<{ url?: string }>;
+					};
+				};
 			};
 		};
 		expect(firstRequestBody.variables?.input?.assets).toEqual({
@@ -335,7 +380,10 @@ describe("content:afterPublish hook", () => {
 				);
 			}
 
-			if (body.query?.includes("GetChannels") && body.variables?.organizationId === "org-1") {
+			if (
+				body.query?.includes("GetChannels") &&
+				body.variables?.organizationId === "org-1"
+			) {
 				return new Response(
 					JSON.stringify({
 						data: {
@@ -347,7 +395,9 @@ describe("content:afterPublish hook", () => {
 			}
 
 			return new Response(
-				JSON.stringify({ data: { createPost: { post: { id: "post-created" } } } }),
+				JSON.stringify({
+					data: { createPost: { post: { id: "post-created" } } },
+				}),
 				{ status: 200 },
 			);
 		};
@@ -367,7 +417,9 @@ describe("content:afterPublish hook", () => {
 	});
 
 	it("sends channel-specific metadata for facebook and google business channels", async () => {
-		const { ctx, fetchMock, kvData } = createContext({ "settings:enabledChannelIds": null });
+		const { ctx, fetchMock, kvData } = createContext({
+			"settings:enabledChannelIds": null,
+		});
 		kvData.set("state:discoveredChannels", [
 			{ id: "fb-1", name: "Facebook", service: "facebook" },
 			{ id: "gb-1", name: "Google Business", service: "googlebusiness" },
@@ -389,15 +441,23 @@ describe("content:afterPublish hook", () => {
 			ctx,
 		);
 
-		const facebookBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+		const facebookBody = JSON.parse(
+			String(fetchMock.mock.calls[0]?.[1]?.body),
+		) as {
 			variables?: { input?: { metadata?: { facebook?: { type?: string } } } };
 		};
-		const googleBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as {
+		const googleBody = JSON.parse(
+			String(fetchMock.mock.calls[1]?.[1]?.body),
+		) as {
 			variables?: { input?: { metadata?: { google?: { type?: string } } } };
 		};
 
-		expect(facebookBody.variables?.input?.metadata?.facebook?.type).toBe("post");
-		expect(googleBody.variables?.input?.metadata?.google?.type).toBe("whats_new");
+		expect(facebookBody.variables?.input?.metadata?.facebook?.type).toBe(
+			"post",
+		);
+		expect(googleBody.variables?.input?.metadata?.google?.type).toBe(
+			"whats_new",
+		);
 	});
 
 	it("writes delivery log rows for successful and failed publish attempts", async () => {
@@ -409,7 +469,9 @@ describe("content:afterPublish hook", () => {
 				return new Response("bad request", { status: 400 });
 			}
 			return new Response(
-				JSON.stringify({ data: { createPost: { post: { id: "post-created" } } } }),
+				JSON.stringify({
+					data: { createPost: { post: { id: "post-created" } } },
+				}),
 				{ status: 200 },
 			);
 		};
@@ -454,7 +516,9 @@ describe("content:afterPublish hook", () => {
 			undefined,
 			{
 				query: async () => ({
-					items: Array.from({ length: 205 }, (_value, index) => ({ id: `old-${index + 1}` })),
+					items: Array.from({ length: 205 }, (_value, index) => ({
+						id: `old-${index + 1}`,
+					})),
 				}),
 			},
 		);
@@ -502,7 +566,10 @@ describe("content:afterPublish hook", () => {
 				},
 				put: async (id, value) => {
 					const record = value as { createdAt?: string };
-					rows.push({ id, createdAt: record.createdAt ?? new Date().toISOString() });
+					rows.push({
+						id,
+						createdAt: record.createdAt ?? new Date().toISOString(),
+					});
 				},
 				deleteMany: async (ids) => {
 					const remove = new Set(ids);

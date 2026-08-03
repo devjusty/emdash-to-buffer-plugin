@@ -6,9 +6,12 @@ import emdashToBuffer from "../src/index.js";
 import pluginDefault from "../src/plugin.js";
 import { pluginDefinition } from "../src/runtime.js";
 
-const packageJsonPath = fileURLToPath(new URL("../package.json", import.meta.url));
-const packageVersion = (JSON.parse(readFileSync(packageJsonPath, "utf8")) as { version: string })
-	.version;
+const packageJsonPath = fileURLToPath(
+	new URL("../package.json", import.meta.url),
+);
+const packageVersion = (
+	JSON.parse(readFileSync(packageJsonPath, "utf8")) as { version: string }
+).version;
 
 describe("emdash-to-buffer descriptor", () => {
 	it("exports a valid PluginDescriptor as default", () => {
@@ -18,7 +21,10 @@ describe("emdash-to-buffer descriptor", () => {
 		expect(emdashToBuffer.entrypoint).toBe("emdash-to-buffer-plugin/sandbox");
 		expect(emdashToBuffer.capabilities).toContain("content:read");
 		expect(emdashToBuffer.capabilities).toContain("network:request");
-		expect(emdashToBuffer.allowedHosts).toEqual(["api.buffer.com", "api.bufferapp.com"]);
+		expect(emdashToBuffer.allowedHosts).toEqual([
+			"api.buffer.com",
+			"api.bufferapp.com",
+		]);
 		expect(emdashToBuffer.adminPages).toEqual([
 			{ path: "/settings", label: "Buffer Settings", icon: "gear" },
 		]);

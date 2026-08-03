@@ -28,11 +28,14 @@ describe("pickBufferImageUrl", () => {
 		expect(
 			pickBufferImageUrl(
 				{
-					featured_image: "/_emdash/api/media/file/01KNW11TNCSNDKZHNAVGRGB61R.jpg",
+					featured_image:
+						"/_emdash/api/media/file/01KNW11TNCSNDKZHNAVGRGB61R.jpg",
 				},
 				"https://example.com",
 			),
-		).toBe("https://example.com/_emdash/api/media/file/01KNW11TNCSNDKZHNAVGRGB61R.jpg");
+		).toBe(
+			"https://example.com/_emdash/api/media/file/01KNW11TNCSNDKZHNAVGRGB61R.jpg",
+		);
 	});
 
 	it("resolves MediaValue objects with storageKey", () => {

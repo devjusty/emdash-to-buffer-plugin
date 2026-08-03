@@ -2,7 +2,10 @@ import type { BufferTemplateData } from "./types.js";
 
 const tagPattern = /\{([a-zA-Z0-9_]+)\}/g;
 
-export function renderMessageTemplate(template: string, data: BufferTemplateData): string {
+export function renderMessageTemplate(
+	template: string,
+	data: BufferTemplateData,
+): string {
 	const rendered = template.replaceAll(tagPattern, (_full, rawTag: string) => {
 		const tag = rawTag.toLowerCase();
 		if (tag === "title") return data.title;

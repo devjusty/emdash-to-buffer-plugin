@@ -16,7 +16,7 @@
 - Build package artifacts: `pnpm build`.
 - Run unused-code analysis: `pnpm knip`.
 - Local development uses `pnpm dev` through `@emdash-cms/plugin-cli`.
-- CI order is `pnpm typecheck`, `pnpm test`, `pnpm build`, then `pnpm knip`.
+- CI order is version sync, `pnpm check`, `pnpm typecheck`, `pnpm test`, `pnpm validate`, `pnpm build`, then `pnpm knip`.
 
 ## Behavior Constraints
 

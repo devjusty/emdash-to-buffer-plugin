@@ -12,7 +12,10 @@
 			"!!**/.pnpm-store",
 			"!!**/.agents",
 			"!!**/.claude",
-			"!!**/coverage"
+			"!!**/.fallow",
+			"!!**/coverage",
+			"!!**/skills-lock.json",
+			"!!**/.fallowrc.json"
 		]
 	},
 	"formatter": {

@@ -5,8 +5,14 @@
 	"publisher": "did:plc:juoj6qmxkdbbino76mobq2on", // justy.dev
 
 	"license": "MIT",
-	"author": { "name": "Justin Thompson", "url": "https://github.com/devjusty", "email": "devjusty@gmail.com" },
-	"security": { "url": "https://github.com/devjusty/emdash-to-buffer-plugin/security/advisories/new" },
+	"author": {
+		"name": "Justin Thompson",
+		"url": "https://github.com/devjusty",
+		"email": "devjusty@gmail.com"
+	},
+	"security": {
+		"url": "https://github.com/devjusty/emdash-to-buffer-plugin/security/advisories/new"
+	},
 
 	"name": "EmDash to Buffer",
 	"description": "Queue newly published EmDash posts to Buffer channels.",
@@ -22,6 +28,8 @@
 	},
 
 	"admin": {
-		"pages": [{ "path": "/settings", "label": "Buffer Settings", "icon": "gear" }]
+		"pages": [
+			{ "path": "/settings", "label": "Buffer Settings", "icon": "gear" }
+		]
 	}
 }
