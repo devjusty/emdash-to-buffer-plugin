@@ -22,6 +22,11 @@ interface PublishEvent {
 
 interface PublishHookEvent {
 	collection: string;
+	isNew?: boolean;
+	before?: {
+		status?: string;
+		published_at?: string | null;
+	};
 	content: Record<string, unknown>;
 }
 
@@ -399,14 +404,15 @@ export async function handleAfterPublish(
 	ctx: PluginContext,
 ): Promise<void> {
 	if (event.collection !== "posts") return;
+	if (!isFirstPublish(event)) return;
 	await handlePublishedContent(
 		event.collection,
 		event.content,
 		ctx,
 		"content:afterPublish",
 		{
-			hasBefore: false,
-			isNew: false,
+			hasBefore: !!event.before,
+			isNew: event.isNew === true,
 		},
 	);
 }

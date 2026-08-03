@@ -187,12 +187,13 @@ describe("content:afterSave hook", () => {
 		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});
 
-	it("sends on content:afterPublish even without isNew/before fields", async () => {
+	it("skips content:afterPublish updates to already-published posts", async () => {
 		const { ctx, fetchMock } = createContext();
 
 		await handleAfterPublish(
 			{
 				collection: "posts",
+				before: { status: "published", published_at: "2026-04-21T00:00:00.000Z" },
 				content: {
 					id: "post-2",
 					slug: "published-from-workflow",
@@ -206,7 +207,7 @@ describe("content:afterSave hook", () => {
 			ctx,
 		);
 
-		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(fetchMock).toHaveBeenCalledTimes(0);
 	});
 
 	it("falls back to /posts/{slug} when no canonical URL is present", async () => {
