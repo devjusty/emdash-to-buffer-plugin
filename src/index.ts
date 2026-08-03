@@ -1,20 +1,24 @@
 import type { PluginDescriptor } from "emdash";
 
-export function emdashToBufferPlugin(): PluginDescriptor {
-	return {
-		id: "emdash-to-buffer",
-		version: "1.0.1",
-		format: "standard",
-		entrypoint: "emdash-to-buffer-plugin/sandbox",
-		options: {},
-		storage: {
-			delivery_logs: {
-				indexes: ["createdAt", "status", "channelId", "postId", "postSlug"],
-			},
+/**
+ * Source-level descriptor used by tests. `emdash-plugin build` regenerates
+ * `dist/index.mjs` from `emdash-plugin.jsonc` + `package.json` for publish.
+ */
+const emdashToBuffer: PluginDescriptor = {
+	id: "emdash-to-buffer",
+	version: "1.1.0",
+	format: "standard",
+	entrypoint: "emdash-to-buffer-plugin/sandbox",
+	options: {},
+	storage: {
+		delivery_logs: {
+			indexes: ["createdAt", "status", "channelId", "postId", "postSlug"],
 		},
-		capabilities: ["content:read", "network:request"],
-		allowedHosts: ["api.buffer.com", "api.bufferapp.com"],
-		adminPages: [{ path: "/settings", label: "Buffer Settings", icon: "gear" }],
-		adminWidgets: [],
-	};
-}
+	},
+	capabilities: ["content:read", "network:request"],
+	allowedHosts: ["api.buffer.com", "api.bufferapp.com"],
+	adminPages: [{ path: "/settings", label: "Buffer Settings", icon: "gear" }],
+	adminWidgets: [],
+};
+
+export default emdashToBuffer;

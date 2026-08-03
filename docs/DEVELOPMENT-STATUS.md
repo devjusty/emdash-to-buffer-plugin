@@ -1,6 +1,6 @@
 # Emdash to Buffer Plugin Status
 
-## Current Release: `emdash-to-buffer-plugin@1.0.1`
+## Current Release: `emdash-to-buffer-plugin@1.1.0`
 
 MVP: Emdash CMS plugin that sends published `posts` entries to Buffer, queues them on discovered/enabled channels, and prefers the content canonical URL with `/posts/{slug}` as fallback. Posts include title, excerpt, URL, and featured/OG image when available. Supported channels include LinkedIn, Facebook, and Google Business.
 
@@ -8,7 +8,8 @@ MVP: Emdash CMS plugin that sends published `posts` entries to Buffer, queues th
 
 ## Revision History
 
-- 1.0.1: Patch release aligning plugin descriptor/native versions with package.json and tightening admin interaction typing.
+- 1.1.0: Breaking install-shape update (default export, drop `/native`), EmDash 0.30+ peer, publish-hook contract fix (`content:afterPublish` primary + delivery claim; no republish-after-unpublish by default), packaging via `emdash-plugin` CLI + `emdash-plugin.jsonc`.
+- 1.0.1: Patch release aligning plugin descriptor/native versions with package.json and tightening admin interaction typing (unreleased / superseded by 1.1.0).
 - 1.0.0: Stable release cut after validating the native wrapper, sandbox entrypoint, Buffer image handling, and first-publish gating.
 - 0.1.7-beta.3: Sandboxed entrypoint now exports the shared plugin object directly for EmDash 0.13.0 compatibility.
 - 0.1.7-beta.3: Added a native wrapper entrypoint for sites that want the same plugin in native mode.
@@ -26,7 +27,8 @@ MVP: Emdash CMS plugin that sends published `posts` entries to Buffer, queues th
 
 Working:
 
-- Successfully sends posts to linked Buffer channels.
+- Successfully sends posts to linked Buffer channels on first publish.
+- Delivery claim (`state:delivered:{postId}`) prevents double-queue and republish-after-unpublish.
 - Delivery logs capture success/failure with channel, code, and message.
 - Settings page shows discovered channels with on/off toggles.
 - Channel discovery is automatic once the Buffer token is saved.
@@ -35,7 +37,6 @@ Working:
 - Featured image / OG image fallback is implemented and handles local MediaValue objects.
 - Relative image URLs resolve against the site origin.
 - Default post text is title, excerpt, and URL on separate lines.
-- Native wrapper export is available for the same plugin definition.
 - Google Business posts include `detailsWhatsNew` metadata and a learn-more button.
 
 ---
@@ -43,13 +44,15 @@ Working:
 Current Issues:
 
 - No known blocking issues in the current implementation.
-- Follow-up idea: optional best-effort redirect probe if canonical is missing and the site does not use `/posts/{slug}`.
+- Follow-up: optional `repostOnRepublish` settings toggle.
+- Follow-up: `ctx.url()` / `trailingSlash` alignment.
+- Marketplace publish needs a real Atmosphere `publisher` DID in `emdash-plugin.jsonc` (placeholder `did:plc:abc123def456` is for local validate/build only).
 
 ---
 
 Debugging:
 
-- Publish attempts log `hook`, `collection`, `contentId`, `contentStatus`, `hasBefore`, and `isNew`.
+- Publish attempts log `hook`, `collection`, `contentId`, `contentStatus`, and `isNew`.
 - Image extraction logs `contentKeys`, `dataKeys`, `seoKeys`, `pickedImageUrl`, and the resolved post URL.
 - Delivery log retention is capped at 200 rows.
 

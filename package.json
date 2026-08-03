@@ -1,6 +1,6 @@
 {
   "name": "emdash-to-buffer-plugin",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Send newly published EmDash posts to Buffer queue",
   "type": "module",
   "main": "dist/index.mjs",
@@ -9,11 +9,11 @@
       "import": "./dist/index.mjs",
       "types": "./dist/index.d.mts"
     },
-    "./sandbox": "./dist/sandbox-entry.mjs",
-    "./native": "./dist/native-entry.mjs"
+    "./sandbox": "./dist/plugin.mjs"
   },
   "files": [
-    "dist"
+    "dist",
+    "emdash-plugin.jsonc"
   ],
   "keywords": [
     "emdash",
@@ -25,22 +25,23 @@
   "author": "Justin Thompson",
   "license": "MIT",
   "peerDependencies": {
-    "emdash": ">=0.2.0"
+    "emdash": ">=0.30.0"
   },
   "devDependencies": {
+    "@emdash-cms/plugin-cli": "0.8.0",
     "@types/node": "^24.10.0",
     "emdash": "^0.31.1",
     "knip": "^6.6.0",
-    "tsdown": "0.20.3",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   },
   "scripts": {
-    "build": "tsdown src/index.ts src/sandbox-entry.ts src/native-entry.ts --format esm --dts --clean",
-    "dev": "tsdown src/index.ts src/sandbox-entry.ts src/native-entry.ts --format esm --dts --watch",
+    "build": "emdash-plugin build",
+    "dev": "emdash-plugin dev",
     "knip": "knip",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "validate": "emdash-plugin validate"
   },
   "repository": {
     "type": "git",
@@ -49,8 +50,7 @@
   "knip": {
     "entry": [
       "src/index.ts",
-      "src/sandbox-entry.ts",
-      "src/native-entry.ts"
+      "src/plugin.ts"
     ]
   },
   "packageManager": "pnpm@11.20.0+sha512.9a6f330a95b66446ea088faf1521405a8a01f07fde7124cc9958dfed52d4bb436737e65b08f85f37b46fcba375092558ac51262b816844b22f63406ed166bfee"

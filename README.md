@@ -6,7 +6,8 @@ This plugin is under active development. It is currently only confirmed to work 
 
 ## Features
 
-- Publish-only trigger for `posts`
+- Triggers on `content:afterPublish` (draft → live) and create-as-published saves
+- Skips republish-after-unpublish by default (per-post delivery claim)
 - Multi-channel fan-out
 - Automatic channel discovery from your Buffer account
 - Settings UI with discoverable channel table and on/off channel toggles
@@ -18,6 +19,8 @@ This plugin is under active development. It is currently only confirmed to work 
 
 ## Install
 
+Requires EmDash `>=0.30.0`.
+
 ```bash
 pnpm add emdash-to-buffer-plugin
 ```
@@ -27,20 +30,21 @@ pnpm add emdash-to-buffer-plugin
 ```ts
 import { defineConfig } from "astro/config";
 import emdash from "emdash";
-import { emdashToBufferPlugin } from "emdash-to-buffer-plugin";
+import emdashToBuffer from "emdash-to-buffer-plugin";
 
 export default defineConfig({
   integrations: [
     emdash({
-      plugins: [emdashToBufferPlugin()],
+      // Trusted / in-process (all platforms, including Node)
+      plugins: [emdashToBuffer],
+      // Or sandboxed isolates on Cloudflare:
+      // sandboxed: [emdashToBuffer],
     }),
   ],
 });
 ```
 
-Native installs can import `emdash-to-buffer-plugin/native` as a ready-to-use native plugin export.
-
-Configure plugin settings in EmDash admin (`Plugins` -> `emdash-to-buffer` -> `Settings`):
+Configure plugin settings in EmDash admin (`Plugins` → `emdash-to-buffer` → `Settings`):
 
 - Buffer access token
 - Discover channels and toggle enabled channels
@@ -48,10 +52,17 @@ Configure plugin settings in EmDash admin (`Plugins` -> `emdash-to-buffer` -> `S
 - Message template
 - Enable/disable switch
 
+## Breaking changes in 1.1.0
+
+- Install uses a **default export** (no `emdashToBufferPlugin()` factory).
+- The `emdash-to-buffer-plugin/native` entrypoint was removed. Use the standard export in `plugins:` or `sandboxed:`.
+- Peer dependency is `emdash >= 0.30.0`.
+
 ## Development
 
 ```bash
 pnpm install
 pnpm test
+pnpm validate
 pnpm build
 ```

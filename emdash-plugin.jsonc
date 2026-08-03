@@ -1,0 +1,27 @@
+{
+	"$schema": "./node_modules/@emdash-cms/plugin-cli/schemas/emdash-plugin.schema.json",
+
+	"slug": "emdash-to-buffer",
+	"publisher": "did:plc:juoj6qmxkdbbino76mobq2on", // justy.dev
+
+	"license": "MIT",
+	"author": { "name": "Justin Thompson", "url": "https://github.com/devjusty", "email": "devjusty@gmail.com" },
+	"security": { "url": "https://github.com/devjusty/emdash-to-buffer-plugin/security/advisories/new" },
+
+	"name": "EmDash to Buffer",
+	"description": "Queue newly published EmDash posts to Buffer channels.",
+	"keywords": ["buffer", "syndication", "social"],
+	"repo": "https://github.com/devjusty/emdash-to-buffer-plugin",
+
+	"capabilities": ["content:read", "network:request"],
+	"allowedHosts": ["api.buffer.com", "api.bufferapp.com"],
+	"storage": {
+		"delivery_logs": {
+			"indexes": ["createdAt", "status", "channelId", "postId", "postSlug"]
+		}
+	},
+
+	"admin": {
+		"pages": [{ "path": "/settings", "label": "Buffer Settings", "icon": "gear" }]
+	}
+}

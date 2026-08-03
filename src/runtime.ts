@@ -1,5 +1,9 @@
-import type { PluginContext } from "emdash";
-import type { SandboxedPlugin } from "emdash/plugin";
+import type {
+	ContentHookEvent,
+	ContentPublishStateChangeEvent,
+	PluginContext,
+	SandboxedPlugin,
+} from "emdash/plugin";
 
 import {
 	type BufferChannel,
@@ -10,29 +14,13 @@ import { inspectBufferImageUrl } from "./images.js";
 import { renderMessageTemplate } from "./render.js";
 import type { DeliveryLogRecord } from "./types.js";
 
-interface PublishEvent {
-	collection: string;
-	isNew?: boolean;
-	before?: {
-		status?: string;
-		published_at?: string | null;
-	};
-	content: Record<string, unknown>;
-}
-
-interface PublishHookEvent {
-	collection: string;
-	isNew?: boolean;
-	before?: {
-		status?: string;
-		published_at?: string | null;
-	};
-	content: Record<string, unknown>;
-}
-
 type PublishHookName = "content:afterSave" | "content:afterPublish";
 
-export interface AdminInteraction {
+function deliveredKey(postId: string): string {
+	return `state:delivered:${postId}`;
+}
+
+interface AdminInteraction {
 	type?: string;
 	page?: string;
 	action_id?: string;
@@ -131,14 +119,13 @@ function logPublishAttempt(
 	hook: PublishHookName,
 	collection: string,
 	content: Record<string, unknown>,
-	metadata: { hasBefore: boolean; isNew: boolean; status: string | null },
+	metadata: { isNew: boolean; status: string | null },
 ) {
 	ctx.log.info("emdash-to-buffer publish attempt", {
 		hook,
 		collection,
 		contentId: typeof content.id === "string" ? content.id : undefined,
 		contentStatus: metadata.status,
-		hasBefore: metadata.hasBefore,
 		isNew: metadata.isNew,
 	});
 }
@@ -176,19 +163,8 @@ function resolvePublishedUrl(
 	return resolveAbsoluteUrl(`/posts/${slug}`, siteUrl);
 }
 
-function isFirstPublish(event: PublishEvent): boolean {
-	if (event.content.status !== "published") return false;
-	if (event.isNew === true) return true;
-
-	if (!event.before) {
-		return false;
-	}
-
-	if (event.before.status && event.before.status !== "published") {
-		return true;
-	}
-
-	return false;
+function isPublished(content: Record<string, unknown>): boolean {
+	return content.status === "published";
 }
 
 function normalizeEnabledChannelIds(value: unknown): string[] | null {
@@ -382,38 +358,33 @@ async function getChannelsForPublishing(
 }
 
 export async function handleAfterSave(
-	event: PublishEvent,
+	event: ContentHookEvent,
 	ctx: PluginContext,
 ): Promise<void> {
 	if (event.collection !== "posts") return;
-	if (!isFirstPublish(event)) return;
+	// Create-as-published only. Draft → live goes through content:afterPublish.
+	if (event.isNew !== true || !isPublished(event.content)) return;
 	await handlePublishedContent(
 		event.collection,
 		event.content,
 		ctx,
 		"content:afterSave",
-		{
-			hasBefore: !!event.before,
-			isNew: event.isNew === true,
-		},
+		{ isNew: true },
 	);
 }
 
 export async function handleAfterPublish(
-	event: PublishHookEvent,
+	event: ContentPublishStateChangeEvent,
 	ctx: PluginContext,
 ): Promise<void> {
 	if (event.collection !== "posts") return;
-	if (!isFirstPublish(event)) return;
+	if (!isPublished(event.content)) return;
 	await handlePublishedContent(
 		event.collection,
 		event.content,
 		ctx,
 		"content:afterPublish",
-		{
-			hasBefore: !!event.before,
-			isNew: event.isNew === true,
-		},
+		{ isNew: false },
 	);
 }
 
@@ -422,14 +393,13 @@ async function handlePublishedContent(
 	content: Record<string, unknown>,
 	ctx: PluginContext,
 	hook: PublishHookName,
-	metadata: { hasBefore: boolean; isNew: boolean },
+	metadata: { isNew: boolean },
 ): Promise<void> {
-	if (content.status !== "published") return;
+	if (!isPublished(content)) return;
 
 	const postId = typeof content.id === "string" ? content.id : "";
 	const postSlug = typeof content.slug === "string" ? content.slug : "";
 	logPublishAttempt(ctx, hook, collection, content, {
-		hasBefore: metadata.hasBefore,
 		isNew: metadata.isNew,
 		status: typeof content.status === "string" ? content.status : null,
 	});
@@ -480,6 +450,23 @@ async function handlePublishedContent(
 			message: "No enabled Buffer channels found",
 		});
 		return;
+	}
+
+	// Claim before send so afterSave + afterPublish cannot double-queue.
+	// Persists across unpublish → republish (repostOnRepublish setting TBD).
+	if (postId) {
+		const existing = await ctx.kv.get<unknown>(deliveredKey(postId));
+		if (existing) {
+			ctx.log.info("emdash-to-buffer skipped send; already delivered", {
+				postId,
+				hook,
+			});
+			return;
+		}
+		await ctx.kv.set(deliveredKey(postId), {
+			at: new Date().toISOString(),
+			hook,
+		});
 	}
 
 	const messageTemplate =
@@ -793,7 +780,7 @@ async function saveSettings(
 	};
 }
 
-export async function handleAdminInteraction(
+async function handleAdminInteraction(
 	interaction: AdminInteraction | null,
 	ctx: PluginContext,
 ) {

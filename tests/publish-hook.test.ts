@@ -37,14 +37,18 @@ function createContext(
 	}
 
 	const fetchMock = vi.fn(
-		fetchImpl ?? (async (_input: string, init?: RequestInit) => {
-			const body = JSON.parse(String(init?.body)) as { query?: string; variables?: Record<string, string> };
-
-			return new Response(JSON.stringify({ data: { createPost: { post: { id: "p" } } } }), { status: 200 });
-		}),
+		fetchImpl ??
+			(async (_input: string, init?: RequestInit) => {
+				JSON.parse(String(init?.body));
+				return new Response(JSON.stringify({ data: { createPost: { post: { id: "p" } } } }), {
+					status: 200,
+				});
+			}),
 	);
 	const putMock = vi.fn(storageOverrides?.put ?? (async () => {}));
-	const queryMock = vi.fn(storageOverrides?.query ?? (async () => ({ items: [], hasMore: false })));
+	const queryMock = vi.fn(
+		storageOverrides?.query ?? (async () => ({ items: [], hasMore: false })),
+	);
 	const deleteManyMock = vi.fn(storageOverrides?.deleteMany ?? (async () => {}));
 
 	return {
@@ -80,24 +84,25 @@ function createContext(
 	};
 }
 
-describe("content:afterSave hook", () => {
-	it("sends to all enabled channels for first publish in posts collection", async () => {
+const publishedPost = {
+	id: "post-1",
+	slug: "hello-world",
+	data: {
+		title: "Hello World",
+		excerpt: "Excerpt",
+	},
+	status: "published",
+	published_at: "2026-04-21T00:00:00.000Z",
+};
+
+describe("content:afterPublish hook", () => {
+	it("sends to all enabled channels when a post is published", async () => {
 		const { ctx, fetchMock } = createContext();
 
-		await handleAfterSave(
+		await handleAfterPublish(
 			{
 				collection: "posts",
-				before: { status: "draft", published_at: null },
-				content: {
-					id: "post-1",
-					slug: "hello-world",
-					data: {
-						title: "Hello World",
-						excerpt: "Excerpt",
-					},
-					status: "published",
-					published_at: "2026-04-21T00:00:00.000Z",
-				},
+				content: publishedPost,
 			},
 			ctx,
 		);
@@ -105,11 +110,10 @@ describe("content:afterSave hook", () => {
 		expect(ctx.log.info).toHaveBeenCalledWith(
 			"emdash-to-buffer publish attempt",
 			expect.objectContaining({
-				hook: "content:afterSave",
+				hook: "content:afterPublish",
 				collection: "posts",
 				contentId: "post-1",
 				contentStatus: "published",
-				hasBefore: true,
 				isNew: false,
 			}),
 		);
@@ -122,33 +126,60 @@ describe("content:afterSave hook", () => {
 			}),
 		);
 		const firstRequestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-			query?: string;
 			variables?: { input?: { text?: string } };
 		};
 		expect(firstRequestBody.variables?.input?.text).toContain("Hello World");
 		expect(firstRequestBody.variables?.input?.text).toContain("Excerpt");
-		expect(firstRequestBody.variables?.input?.text).toContain("https://example.com/posts/hello-world");
+		expect(firstRequestBody.variables?.input?.text).toContain(
+			"https://example.com/posts/hello-world",
+		);
 		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(ctx.kv.get).toBeDefined();
+	});
+
+	it("skips when post was already delivered (no republish after unpublish)", async () => {
+		const { ctx, fetchMock } = createContext({
+			"state:delivered:post-1": { at: "2026-04-20T00:00:00.000Z", hook: "content:afterPublish" },
+		});
+
+		await handleAfterPublish(
+			{
+				collection: "posts",
+				content: publishedPost,
+			},
+			ctx,
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(0);
+		expect(ctx.log.info).toHaveBeenCalledWith(
+			"emdash-to-buffer skipped send; already delivered",
+			expect.objectContaining({ postId: "post-1" }),
+		);
+	});
+
+	it("claims delivery so a second hook cannot double-queue", async () => {
+		const { ctx, fetchMock, kvData } = createContext();
+
+		await handleAfterPublish(
+			{ collection: "posts", content: publishedPost },
+			ctx,
+		);
+		await handleAfterPublish(
+			{ collection: "posts", content: publishedPost },
+			ctx,
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(kvData.get("state:delivered:post-1")).toEqual(
+			expect.objectContaining({ hook: "content:afterPublish" }),
+		);
 	});
 
 	it("skips publishing when explicit enabled channels list is empty", async () => {
 		const { ctx, fetchMock, putMock } = createContext({ "settings:enabledChannelIds": [] });
 
-		await handleAfterSave(
-			{
-				collection: "posts",
-				before: { status: "draft", published_at: null },
-				content: {
-					id: "post-1",
-					slug: "hello-world",
-					data: {
-						title: "Hello World",
-						excerpt: "Excerpt",
-					},
-					status: "published",
-					published_at: "2026-04-21T00:00:00.000Z",
-				},
-			},
+		await handleAfterPublish(
+			{ collection: "posts", content: publishedPost },
 			ctx,
 		);
 
@@ -164,65 +195,17 @@ describe("content:afterSave hook", () => {
 		);
 	});
 
-	it("treats isNew published events as first publish even without before payload", async () => {
-		const { ctx, fetchMock } = createContext();
-
-		await handleAfterSave(
-			{
-				collection: "posts",
-				isNew: true,
-				content: {
-					id: "post-1",
-					slug: "hello-world",
-					data: {
-						title: "Hello World",
-						excerpt: "Excerpt",
-					},
-					status: "published",
-				},
-			},
-			ctx,
-		);
-
-		expect(fetchMock).toHaveBeenCalledTimes(2);
-	});
-
-	it("skips content:afterPublish updates to already-published posts", async () => {
+	it("falls back to /posts/{slug} when no canonical URL is present", async () => {
 		const { ctx, fetchMock } = createContext();
 
 		await handleAfterPublish(
 			{
 				collection: "posts",
-				before: { status: "published", published_at: "2026-04-21T00:00:00.000Z" },
-				content: {
-					id: "post-2",
-					slug: "published-from-workflow",
-					data: {
-						title: "Published from workflow",
-						excerpt: "Excerpt",
-					},
-					status: "published",
-				},
-			},
-			ctx,
-		);
-
-		expect(fetchMock).toHaveBeenCalledTimes(0);
-	});
-
-	it("falls back to /posts/{slug} when no canonical URL is present", async () => {
-		const { ctx, fetchMock } = createContext();
-
-		await handleAfterSave(
-			{
-				collection: "posts",
-				before: { status: "draft", published_at: null },
 				content: {
 					id: "post-3",
 					slug: "hello-world",
 					data: { title: "Hello World", excerpt: "Excerpt" },
 					status: "published",
-					published_at: "2026-04-21T00:00:00.000Z",
 				},
 			},
 			ctx,
@@ -231,23 +214,23 @@ describe("content:afterSave hook", () => {
 		const firstRequestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
 			variables?: { input?: { text?: string } };
 		};
-		expect(firstRequestBody.variables?.input?.text).toContain("https://example.com/posts/hello-world");
+		expect(firstRequestBody.variables?.input?.text).toContain(
+			"https://example.com/posts/hello-world",
+		);
 	});
 
 	it("uses content canonical URL when present", async () => {
 		const { ctx, fetchMock } = createContext();
 
-		await handleAfterSave(
+		await handleAfterPublish(
 			{
 				collection: "posts",
-				before: { status: "draft", published_at: null },
 				content: {
 					id: "post-4",
 					slug: "hello-world",
 					seo: { canonical: "/custom/hello-world" },
 					data: { title: "Hello World", excerpt: "Excerpt" },
 					status: "published",
-					published_at: "2026-04-21T00:00:00.000Z",
 				},
 			},
 			ctx,
@@ -256,24 +239,24 @@ describe("content:afterSave hook", () => {
 		const firstRequestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
 			variables?: { input?: { text?: string } };
 		};
-		expect(firstRequestBody.variables?.input?.text).toContain("https://example.com/custom/hello-world");
+		expect(firstRequestBody.variables?.input?.text).toContain(
+			"https://example.com/custom/hello-world",
+		);
 	});
 
 	it("omits image assets for localhost image URLs", async () => {
 		const { ctx, fetchMock } = createContext();
 		ctx.site.url = "http://localhost:4321";
 
-		await handleAfterSave(
+		await handleAfterPublish(
 			{
 				collection: "posts",
-				before: { status: "draft", published_at: null },
 				content: {
 					id: "post-5",
 					slug: "hello-local",
 					featured_image: "/_emdash/api/media/file/01LOCAL.jpg",
 					data: { title: "Hello Local", excerpt: "Excerpt" },
 					status: "published",
-					published_at: "2026-04-21T00:00:00.000Z",
 				},
 			},
 			ctx,
@@ -288,24 +271,24 @@ describe("content:afterSave hook", () => {
 	it("uses Buffer's new single-image asset input shape", async () => {
 		const { ctx, fetchMock } = createContext();
 
-		await handleAfterSave(
+		await handleAfterPublish(
 			{
 				collection: "posts",
-				before: { status: "draft", published_at: null },
 				content: {
 					id: "post-6",
 					slug: "hello-image",
 					featured_image: "https://cdn.example.com/featured.jpg",
 					data: { title: "Hello Image", excerpt: "Excerpt" },
 					status: "published",
-					published_at: "2026-04-21T00:00:00.000Z",
 				},
 			},
 			ctx,
 		);
 
 		const firstRequestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-			variables?: { input?: { assets?: { image?: { url?: string }; images?: Array<{ url?: string }> } } };
+			variables?: {
+				input?: { assets?: { image?: { url?: string }; images?: Array<{ url?: string }> } };
+			};
 		};
 		expect(firstRequestBody.variables?.input?.assets).toEqual({
 			image: { url: "https://cdn.example.com/featured.jpg" },
@@ -316,57 +299,14 @@ describe("content:afterSave hook", () => {
 	it("skips non-post collections", async () => {
 		const { ctx, fetchMock } = createContext();
 
-		await handleAfterSave(
+		await handleAfterPublish(
 			{
 				collection: "pages",
-				before: { status: "draft", published_at: null },
 				content: {
 					id: "page-1",
 					slug: "about",
 					data: { title: "About" },
 					status: "published",
-					published_at: "2026-04-21T00:00:00.000Z",
-				},
-			},
-			ctx,
-		);
-
-		expect(fetchMock).toHaveBeenCalledTimes(0);
-	});
-
-	it("skips updates after initial publish", async () => {
-		const { ctx, fetchMock } = createContext();
-
-		await handleAfterSave(
-			{
-				collection: "posts",
-				before: { status: "published", published_at: "2026-04-21T00:00:00.000Z" },
-				content: {
-					id: "post-1",
-					slug: "hello-world",
-					data: { title: "Hello World updated" },
-					status: "published",
-					published_at: "2026-04-21T00:00:00.000Z",
-				},
-			},
-			ctx,
-		);
-
-		expect(fetchMock).toHaveBeenCalledTimes(0);
-	});
-
-	it("skips published saves without a before payload", async () => {
-		const { ctx, fetchMock } = createContext();
-
-		await handleAfterSave(
-			{
-				collection: "posts",
-				content: {
-					id: "post-7",
-					slug: "hello-world",
-					data: { title: "Hello World updated" },
-					status: "published",
-					published_at: "2026-04-21T00:00:00.000Z",
 				},
 			},
 			ctx,
@@ -412,24 +352,14 @@ describe("content:afterSave hook", () => {
 			);
 		};
 
-		const { ctx, fetchMock, kvData } = createContext({ "settings:enabledChannelIds": null }, fetchImpl);
+		const { ctx, fetchMock, kvData } = createContext(
+			{ "settings:enabledChannelIds": null },
+			fetchImpl,
+		);
 		kvData.set("state:discoveredChannels", []);
 
-		await handleAfterSave(
-			{
-				collection: "posts",
-				before: { status: "draft", published_at: null },
-				content: {
-					id: "post-1",
-					slug: "hello-world",
-					data: {
-						title: "Hello World",
-						excerpt: "Excerpt",
-					},
-					status: "published",
-					published_at: "2026-04-21T00:00:00.000Z",
-				},
-			},
+		await handleAfterPublish(
+			{ collection: "posts", content: publishedPost },
 			ctx,
 		);
 
@@ -443,10 +373,9 @@ describe("content:afterSave hook", () => {
 			{ id: "gb-1", name: "Google Business", service: "googlebusiness" },
 		]);
 
-		await handleAfterSave(
+		await handleAfterPublish(
 			{
 				collection: "posts",
-				before: { status: "draft", published_at: null },
 				content: {
 					id: "post-9",
 					slug: "social-post",
@@ -455,7 +384,6 @@ describe("content:afterSave hook", () => {
 						excerpt: "Snippet",
 					},
 					status: "published",
-					published_at: "2026-04-21T00:00:00.000Z",
 				},
 			},
 			ctx,
@@ -488,21 +416,8 @@ describe("content:afterSave hook", () => {
 
 		const { ctx, putMock } = createContext(undefined, fetchImpl);
 
-		await handleAfterSave(
-			{
-				collection: "posts",
-				before: { status: "draft", published_at: null },
-				content: {
-					id: "post-1",
-					slug: "hello-world",
-					data: {
-						title: "Hello World",
-						excerpt: "Excerpt",
-					},
-					status: "published",
-					published_at: "2026-04-21T00:00:00.000Z",
-				},
-			},
+		await handleAfterPublish(
+			{ collection: "posts", content: publishedPost },
 			ctx,
 		);
 
@@ -544,26 +459,21 @@ describe("content:afterSave hook", () => {
 			},
 		);
 
-		await handleAfterSave(
-			{
-				collection: "posts",
-				before: { status: "draft", published_at: null },
-				content: {
-					id: "post-1",
-					slug: "hello-world",
-					data: {
-						title: "Hello World",
-						excerpt: "Excerpt",
-					},
-					status: "published",
-					published_at: "2026-04-21T00:00:00.000Z",
-				},
-			},
+		await handleAfterPublish(
+			{ collection: "posts", content: publishedPost },
 			ctx,
 		);
 
-		expect(queryMock).toHaveBeenCalledWith(expect.objectContaining({ orderBy: { createdAt: "asc" }, limit: 500 }));
-		expect(deleteManyMock).toHaveBeenCalledWith(["old-1", "old-2", "old-3", "old-4", "old-5"]);
+		expect(queryMock).toHaveBeenCalledWith(
+			expect.objectContaining({ orderBy: { createdAt: "asc" }, limit: 500 }),
+		);
+		expect(deleteManyMock).toHaveBeenCalledWith([
+			"old-1",
+			"old-2",
+			"old-3",
+			"old-4",
+			"old-5",
+		]);
 	});
 
 	it("prunes logs globally to 200 when storage has more than 500 rows", async () => {
@@ -604,21 +514,8 @@ describe("content:afterSave hook", () => {
 			},
 		);
 
-		await handleAfterSave(
-			{
-				collection: "posts",
-				before: { status: "draft", published_at: null },
-				content: {
-					id: "post-1",
-					slug: "hello-world",
-					data: {
-						title: "Hello World",
-						excerpt: "Excerpt",
-					},
-					status: "published",
-					published_at: "2026-04-21T00:00:00.000Z",
-				},
-			},
+		await handleAfterPublish(
+			{ collection: "posts", content: publishedPost },
 			ctx,
 		);
 
@@ -633,14 +530,81 @@ describe("content:afterSave hook", () => {
 		);
 		expect(queryMock).toHaveBeenNthCalledWith(
 			2,
-			expect.objectContaining({ orderBy: { createdAt: "asc" }, limit: 500, cursor: "500" }),
+			expect.objectContaining({
+				orderBy: { createdAt: "asc" },
+				limit: 500,
+				cursor: "500",
+			}),
 		);
 		expect(deleteManyMock).toHaveBeenCalled();
 		expect(totalDeleted).toBe(602);
 		expect(rows).toHaveLength(200);
 		expect(rows.some((row) => row.id === "old-1")).toBe(false);
 	});
+});
 
+describe("content:afterSave hook", () => {
+	it("sends for create-as-published (isNew + published)", async () => {
+		const { ctx, fetchMock } = createContext();
+
+		await handleAfterSave(
+			{
+				collection: "posts",
+				isNew: true,
+				content: {
+					id: "post-1",
+					slug: "hello-world",
+					data: {
+						title: "Hello World",
+						excerpt: "Excerpt",
+					},
+					status: "published",
+				},
+			},
+			ctx,
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(ctx.log.info).toHaveBeenCalledWith(
+			"emdash-to-buffer publish attempt",
+			expect.objectContaining({
+				hook: "content:afterSave",
+				isNew: true,
+			}),
+		);
+	});
+
+	it("skips published updates that are not new creates", async () => {
+		const { ctx, fetchMock } = createContext();
+
+		await handleAfterSave(
+			{
+				collection: "posts",
+				isNew: false,
+				content: publishedPost,
+			},
+			ctx,
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(0);
+	});
+
+	it("skips published saves without isNew", async () => {
+		const { ctx, fetchMock } = createContext();
+
+		await handleAfterSave(
+			{
+				collection: "posts",
+				content: publishedPost,
+			} as any,
+			ctx,
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(0);
+	});
+});
+
+describe("admin settings", () => {
 	it("keeps explicit empty enabledChannelIds through settings load and save", async () => {
 		const discoveredChannels = [
 			{ id: "c1", name: "Channel 1", service: "twitter" },
@@ -655,11 +619,19 @@ describe("content:afterSave hook", () => {
 			{ input: { type: "page_load", page: "/settings" } },
 			ctx,
 		)) as {
-			blocks: Array<{ type?: string; block_id?: string; fields?: Array<{ action_id?: string; initial_value?: unknown }> }>;
+			blocks: Array<{
+				type?: string;
+				block_id?: string;
+				fields?: Array<{ action_id?: string; initial_value?: unknown }>;
+			}>;
 		};
 
-		const formBlock = firstLoad.blocks.find((block) => block.type === "form" && block.block_id === "buffer-settings");
-		const enabledField = formBlock?.fields?.find((field) => field.action_id === "enabledChannelIds");
+		const formBlock = firstLoad.blocks.find(
+			(block) => block.type === "form" && block.block_id === "buffer-settings",
+		);
+		const enabledField = formBlock?.fields?.find(
+			(field) => field.action_id === "enabledChannelIds",
+		);
 		expect(enabledField?.initial_value).toEqual([]);
 
 		await pluginDefinition.routes.admin.handler(
@@ -681,7 +653,11 @@ describe("content:afterSave hook", () => {
 			{ input: { type: "page_load", page: "/settings" } },
 			ctx,
 		)) as {
-			blocks: Array<{ type?: string; block_id?: string; fields?: Array<{ action_id?: string; initial_value?: unknown }> }>;
+			blocks: Array<{
+				type?: string;
+				block_id?: string;
+				fields?: Array<{ action_id?: string; initial_value?: unknown }>;
+			}>;
 		};
 
 		const formBlockAfterSave = secondLoad.blocks.find(
