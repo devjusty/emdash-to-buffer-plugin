@@ -152,7 +152,6 @@ async function evaluateDeliveryGate(
 	const repostOnRepublish =
 		(await ctx.kv.get<boolean>("settings:repostOnRepublish")) === true;
 	const publishedAtMs = parseTimestampMs(getPublishedAt(content));
-	const updatedAtMs = parseTimestampMs(getUpdatedAt(content));
 	const updatedAt = getUpdatedAt(content);
 	const claim = postId
 		? parseDeliveryClaim(await ctx.kv.get<unknown>(deliveredKey(postId)))
@@ -176,14 +175,6 @@ async function evaluateDeliveryGate(
 				deliver: false,
 				reason: "published before this install started tracking deliveries",
 			};
-		}
-
-		if (
-			publishedAtMs !== null &&
-			updatedAtMs !== null &&
-			updatedAtMs > publishedAtMs
-		) {
-			return { deliver: false, reason: "published content was updated" };
 		}
 	}
 

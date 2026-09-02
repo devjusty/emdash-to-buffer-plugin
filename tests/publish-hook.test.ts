@@ -193,7 +193,7 @@ describe("content:afterPublish hook", () => {
 		);
 	});
 
-	it("skips published updates even when no delivery claim exists", async () => {
+	it("sends a first publish when updatedAt is after publishedAt", async () => {
 		const { ctx, fetchMock } = createContext({
 			"state:watchSince": "2026-04-20T00:00:00.000Z",
 		});
@@ -210,14 +210,7 @@ describe("content:afterPublish hook", () => {
 			ctx,
 		);
 
-		expect(fetchMock).toHaveBeenCalledTimes(0);
-		expect(ctx.log.info).toHaveBeenCalledWith(
-			"emdash-to-buffer skipped send; not a first publish",
-			expect.objectContaining({
-				postId: "post-1",
-				reason: "published content was updated",
-			}),
-		);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});
 
 	it("skips republishes of posts that went live before this install", async () => {

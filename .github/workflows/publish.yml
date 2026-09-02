@@ -86,6 +86,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Biome check
+        run: pnpm check
+
       - name: Test
         run: pnpm test
 
@@ -94,6 +97,9 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Knip
+        run: pnpm knip
 
       - name: Verify package contents
         run: |

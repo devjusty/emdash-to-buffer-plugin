@@ -1,6 +1,6 @@
 # Emdash to Buffer Plugin Status
 
-## Current Release: `emdash-to-buffer-plugin@1.1.1`
+## Current Release: `emdash-to-buffer-plugin@1.1.2-beta.1`
 
 MVP: Emdash CMS plugin that sends published `posts` entries to Buffer, queues them on discovered/enabled channels, and prefers the content canonical URL with `/posts/{slug}` as fallback. Posts include title, excerpt, URL, and featured/OG image when available. Supported channels include LinkedIn, Facebook, and Google Business.
 
@@ -8,6 +8,7 @@ MVP: Emdash CMS plugin that sends published `posts` entries to Buffer, queues th
 
 ## Revision History
 
+- 1.1.2-beta.1: Regression fix for first-publish gating when `updatedAt` is later than `publishedAt`; release-prep validation also runs formatting and unused-code checks.
 - 1.1.1: Stable cut of first-publish-only Buffer delivery. Skip sends when EmDash re-fires `content:afterPublish` for already-live posts (`state:watchSince` watermark + delivery claim); optional `repostOnRepublish` settings toggle. Graduates `1.1.1-beta.1` / `1.1.1-beta.2`.
 - 1.1.1-beta.2: Prerelease validation of the first-publish-only gate on a live site.
 - 1.1.1-beta.1: First-publish-only default. Skip Buffer sends when EmDash re-fires `content:afterPublish` for already-live posts (observation watermark + delivery claim); optional `repostOnRepublish` settings toggle.
@@ -49,9 +50,10 @@ Working:
 
 Current Issues:
 
-- No known blocking issues in the current implementation.
+- Beta risk: a post-level delivery claim can prevent retrying an individual channel after a partial delivery failure.
+- Beta risk: retrying `createPost` after an ambiguous network failure can queue a duplicate if Buffer processed the request before the response was lost.
 - Follow-up: `ctx.url()` / `trailingSlash` alignment.
-- Marketplace publish needs a real Atmosphere `publisher` DID in `emdash-plugin.jsonc` (placeholder `did:plc:abc123def456` is for local validate/build only).
+- Marketplace publish needs confirmation that `publisher` DID in `emdash-plugin.jsonc` matches Atmosphere publisher identity.
 
 ---
 
