@@ -193,6 +193,33 @@ describe("content:afterPublish hook", () => {
 		);
 	});
 
+	it("skips published updates even when no delivery claim exists", async () => {
+		const { ctx, fetchMock } = createContext({
+			"state:watchSince": "2026-04-20T00:00:00.000Z",
+		});
+
+		await handleAfterPublish(
+			{
+				collection: "posts",
+				content: {
+					...publishedPost,
+					published_at: "2026-04-21T00:00:00.000Z",
+					updated_at: "2026-04-22T00:00:00.000Z",
+				},
+			},
+			ctx,
+		);
+
+		expect(fetchMock).toHaveBeenCalledTimes(0);
+		expect(ctx.log.info).toHaveBeenCalledWith(
+			"emdash-to-buffer skipped send; not a first publish",
+			expect.objectContaining({
+				postId: "post-1",
+				reason: "published content was updated",
+			}),
+		);
+	});
+
 	it("skips republishes of posts that went live before this install", async () => {
 		const { ctx, fetchMock, kvData } = createContext({
 			"state:watchSince": "2026-04-25T00:00:00.000Z",
