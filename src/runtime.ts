@@ -18,6 +18,11 @@ type PublishHookName = "content:afterSave" | "content:afterPublish";
 
 const watchSinceKey = "state:watchSince";
 
+// Block Kit requires every table to name the action its sort and "load more"
+// controls send (@emdash-cms/blocks validation: table.page_action_id).
+const CHANNELS_TABLE_PAGE_ACTION = "channels_table_page";
+const DELIVERY_LOGS_TABLE_PAGE_ACTION = "delivery_logs_table_page";
+
 /**
  * Slack applied when the watermark is first written. The publish that
  * establishes the watermark stamped `published_at` moments earlier, so the
@@ -781,7 +786,7 @@ async function buildSettingsPage(
 			{
 				type: "table",
 				block_id: "channels-table",
-				page_action_id: "channels_table_page",
+				page_action_id: CHANNELS_TABLE_PAGE_ACTION,
 				columns: [
 					{ key: "name", label: "Channel", format: "text" },
 					{ key: "service", label: "Network", format: "badge" },
@@ -820,6 +825,7 @@ async function buildSettingsPage(
 			{
 				type: "table",
 				block_id: "delivery-log-table",
+				page_action_id: DELIVERY_LOGS_TABLE_PAGE_ACTION,
 				columns: [
 					{ key: "when", label: "When", format: "text" },
 					{ key: "post", label: "Post", format: "text" },
@@ -860,16 +866,22 @@ async function buildSettingsPage(
 						label: "Buffer Access Token",
 						has_value: !!accessToken,
 					},
-					{
-						type: "checkbox",
-						action_id: "enabledChannelIds",
-						label: "Enabled channels",
-						options: channels.map((channel) => ({
-							label: getChannelLabel(channel),
-							value: channel.id,
-						})),
-						initial_value: selectedChannelIds,
-					},
+					// Block Kit rejects a checkbox with no options, so the field is
+					// left out until channels have been discovered.
+					...(channels.length > 0
+						? [
+								{
+									type: "checkbox",
+									action_id: "enabledChannelIds",
+									label: "Enabled channels",
+									options: channels.map((channel) => ({
+										label: getChannelLabel(channel),
+										value: channel.id,
+									})),
+									initial_value: selectedChannelIds,
+								},
+							]
+						: []),
 					{
 						type: "text_input",
 						action_id: "messageTemplate",
@@ -902,6 +914,10 @@ async function saveSettings(
 ) {
 	const accessToken =
 		typeof values.accessToken === "string" ? values.accessToken.trim() : "";
+	// The channel checkbox is only in the form once channels are discovered.
+	// Without it, keep the stored selection rather than writing an explicit
+	// empty list, which would mean "send to no channels".
+	const hasChannelField = Object.hasOwn(values, "enabledChannelIds");
 	const enabledChannelIds =
 		normalizeEnabledChannelIds(values.enabledChannelIds) ?? [];
 	const messageTemplate =
@@ -915,7 +931,9 @@ async function saveSettings(
 		await ctx.kv.set("settings:accessToken", accessToken);
 	}
 
-	await ctx.kv.set("settings:enabledChannelIds", enabledChannelIds);
+	if (hasChannelField) {
+		await ctx.kv.set("settings:enabledChannelIds", enabledChannelIds);
+	}
 	await ctx.kv.set("settings:messageTemplate", messageTemplate);
 	await ctx.kv.set("settings:enabled", enabled);
 	await ctx.kv.set("settings:repostOnRepublish", repostOnRepublish);
@@ -964,6 +982,16 @@ async function handleAdminInteraction(
 					: `Discovered ${channels.length} Buffer channel${channels.length === 1 ? "" : "s"}.`,
 			},
 		};
+	}
+
+	// Table sorting and "load more" send a block_action with the table's
+	// page_action_id. Both tables list every row, so re-render the page.
+	if (
+		interaction?.type === "block_action" &&
+		(interaction.action_id === CHANNELS_TABLE_PAGE_ACTION ||
+			interaction.action_id === DELIVERY_LOGS_TABLE_PAGE_ACTION)
+	) {
+		return buildSettingsPage(ctx);
 	}
 
 	if (

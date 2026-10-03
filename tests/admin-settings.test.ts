@@ -297,3 +297,82 @@ describe("admin settings route", () => {
 		expect(response.toast.message).toContain("Cleared 4");
 	});
 });
+
+describe("admin settings Block Kit (EmDash 1.x validation)", () => {
+	it("gives every table a page_action_id", async () => {
+		const { ctx } = createContext([["settings:accessToken", "token"]]);
+
+		const response = await pluginDefinition.routes.admin.handler(
+			{ input: { type: "page_load", page: "/settings" } },
+			ctx,
+		);
+
+		const tables = response.blocks.filter(
+			(block: any) => block.type === "table",
+		);
+		expect(tables.length).toBeGreaterThan(0);
+		for (const table of tables as any[]) {
+			expect(typeof table.page_action_id).toBe("string");
+		}
+	});
+
+	it("leaves the channel checkbox out until channels are discovered", async () => {
+		const { ctx } = createContext();
+
+		const response = await pluginDefinition.routes.admin.handler(
+			{ input: { type: "page_load", page: "/settings" } },
+			ctx,
+		);
+
+		const form = response.blocks.find(
+			(block: any) => block.type === "form",
+		) as any;
+		const checkbox = form.fields.find(
+			(field: any) => field.action_id === "enabledChannelIds",
+		);
+		expect(checkbox).toBeUndefined();
+		for (const field of form.fields) {
+			if ("options" in field) expect(field.options.length).toBeGreaterThan(0);
+		}
+	});
+
+	it("keeps the stored channel selection when the form has no channel field", async () => {
+		const { ctx, kvData } = createContext([
+			["settings:enabledChannelIds", ["chan-1"]],
+		]);
+
+		await pluginDefinition.routes.admin.handler(
+			{
+				input: {
+					type: "form_submit",
+					action_id: "save_settings",
+					values: { messageTemplate: "{title}", enabled: true },
+				},
+			},
+			ctx,
+		);
+
+		expect(kvData.get("settings:enabledChannelIds")).toEqual(["chan-1"]);
+	});
+
+	it("re-renders the page for table sort and load-more actions", async () => {
+		const { ctx } = createContext([["settings:accessToken", "token"]]);
+
+		for (const actionId of [
+			"channels_table_page",
+			"delivery_logs_table_page",
+		]) {
+			const response = await pluginDefinition.routes.admin.handler(
+				{
+					input: {
+						type: "block_action",
+						action_id: actionId,
+						value: { sort: { key: "name", dir: "asc" } },
+					},
+				},
+				ctx,
+			);
+			expect(response.blocks.length).toBeGreaterThan(0);
+		}
+	});
+});
