@@ -793,24 +793,15 @@ async function buildSettingsPage(
 					{ key: "id", label: "Channel ID", format: "code" },
 					{ key: "enabled", label: "Enabled", format: "badge" },
 				],
-				rows:
-					channels.length > 0
-						? channels.map((channel) => ({
-								name: channel.username
-									? `${channel.name} (@${channel.username})`
-									: channel.name,
-								service: channel.service,
-								id: channel.id,
-								enabled: selectedSet.has(channel.id) ? "on" : "off",
-							}))
-						: [
-								{
-									name: "No channels discovered yet",
-									service: "-",
-									id: "-",
-									enabled: "off",
-								},
-							],
+				empty_text: "No channels discovered yet.",
+				rows: channels.map((channel) => ({
+					name: channel.username
+						? `${channel.name} (@${channel.username})`
+						: channel.name,
+					service: channel.service,
+					id: channel.id,
+					enabled: selectedSet.has(channel.id) ? "on" : "off",
+				})),
 			},
 			{
 				type: "section",
@@ -834,26 +825,15 @@ async function buildSettingsPage(
 					{ key: "code", label: "Code", format: "code" },
 					{ key: "message", label: "Message", format: "text" },
 				],
-				rows:
-					deliveryLogs.length > 0
-						? deliveryLogs.map((row) => ({
-								when: row.createdAt,
-								post: row.postSlug || row.postId || "-",
-								channel: row.channelId,
-								status: row.status,
-								code: row.code ?? "-",
-								message: row.message,
-							}))
-						: [
-								{
-									when: "-",
-									post: "-",
-									channel: "-",
-									status: "-",
-									code: "-",
-									message: "No delivery logs yet",
-								},
-							],
+				empty_text: "No delivery logs yet.",
+				rows: deliveryLogs.map((row) => ({
+					when: row.createdAt,
+					post: row.postSlug || row.postId || "-",
+					channel: row.channelId,
+					status: row.status,
+					code: row.code ?? "-",
+					message: row.message,
+				})),
 			},
 			{ type: "divider" },
 			{

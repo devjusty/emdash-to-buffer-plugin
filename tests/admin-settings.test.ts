@@ -316,6 +316,23 @@ describe("admin settings Block Kit (EmDash 1.x validation)", () => {
 		}
 	});
 
+	it("shows empty tables with empty_text instead of placeholder rows", async () => {
+		const { ctx } = createContext();
+
+		const response = await pluginDefinition.routes.admin.handler(
+			{ input: { type: "page_load", page: "/settings" } },
+			ctx,
+		);
+
+		const tables = response.blocks.filter(
+			(block: any) => block.type === "table",
+		);
+		for (const table of tables as any[]) {
+			expect(table.rows).toEqual([]);
+			expect(typeof table.empty_text).toBe("string");
+		}
+	});
+
 	it("leaves the channel checkbox out until channels are discovered", async () => {
 		const { ctx } = createContext();
 
